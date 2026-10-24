@@ -20,6 +20,8 @@ Built with Next.js (App Router), TypeScript, Tailwind CSS and Supabase (auth, Po
 | `components/` | The four screens: Money received, Paid by partners, Summary, Settings |
 | `tests/ledger.test.ts` | Calculation tests |
 | `tests/db.test.ts` | Runs the real migration on in-memory Postgres to test the trigger and access rules |
+| `supabase/migrations/20261025000000_sheet_export.sql` | Read-only, key-protected export used by the Google Sheet |
+| `google-sheets/Code.gs` | Apps Script that copies the ledger into the Google Sheet every 5 minutes |
 | `docs/` | The original build prompt and the single-page reference design |
 
 ## 1. Create the Supabase project
@@ -89,6 +91,41 @@ To **change a partner's email** later, update both places:
 - Invite the new address under **Authentication → Users**.
 
 Anyone who signs in with an email that isn't in `partners` sees a "This ledger is for invited partners" page and can't read or write anything.
+
+## 6. Copy everything into the Google Sheet
+
+The app's database is the source of truth. A small script inside the Google Sheet copies everything into it every 5 minutes, even when nobody has the sheet open. The sheet is a read-only mirror: edits made in its Ledger tabs are overwritten on the next sync.
+
+The script writes only these three tabs, creating them if they don't exist:
+
+| Tab | Contents |
+| --- | --- |
+| **Ledger – Money received** | Every receipt with spent, left, note, entered by/at |
+| **Ledger – Expenses** | Every expense, from money received and paid by partners, with the receipt it came from |
+| **Ledger – Summary** | Last-synced time, totals, partner cards, by category, by month |
+
+Every other tab in the spreadsheet is left alone.
+
+**One-time setup** (done by whoever owns the spreadsheet):
+
+1. Run the migration `supabase/migrations/20261025000000_sheet_export.sql` in the Supabase SQL editor. Skip this if you used `supabase db push`, which runs it for you.
+2. In the SQL editor, run `select create_export_key();` and copy the long key it returns. It's shown only once.
+3. Open the spreadsheet and go to **Extensions → Apps Script**.
+4. Replace the contents of `Code.gs` with `google-sheets/Code.gs` from this repo, then click **Save**.
+5. *(Recommended)* Under **Project Settings**, tick **Show "appsscript.json"**, then paste in `google-sheets/appsscript.json`. This sets the time zone to Dhaka and limits the script's permissions to this spreadsheet.
+6. Reload the spreadsheet. A **CashFlow Log** menu appears.
+7. Choose **CashFlow Log → Set up sync…** and approve the Google permissions it asks for. Then paste three values:
+   - the Supabase URL
+   - the anon key
+   - the export key
+8. Choose **CashFlow Log → Turn on auto-sync**.
+9. Set **File → Settings → Time zone** to *(GMT+06:00) Dhaka* so the "Entered at" times display correctly.
+
+**Using it**
+
+- Use **CashFlow Log → Sync now** any time you want it refreshed immediately.
+- If a sync fails, cell A1 of *Ledger – Summary* says so in red, and the last good numbers stay. Google also emails the script owner about repeated failures.
+- **If the export key leaks:** run `delete from export_keys;` then `select create_export_key();`, and enter the new key under **Set up sync…**. The key can only read the ledger, never change it.
 
 ## How the rules are enforced
 

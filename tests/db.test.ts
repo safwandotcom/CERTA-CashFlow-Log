@@ -1,12 +1,19 @@
 // Runs the real migration and seed against an in-memory Postgres (PGlite)
 // to check the database-side rules: overspend trigger, delete guard, RLS.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
+import { byCategory, byMonth, partnerTotals, totals, type Expense, type Partner, type Receipt } from "@/lib/ledger";
 
 const root = path.resolve(__dirname, "..");
-const migration = readFileSync(path.join(root, "supabase/migrations/20261024000000_init.sql"), "utf8").replace(/create extension[^;]+;/i, "");
+const migrationsDir = path.join(root, "supabase/migrations");
+const migration = readdirSync(migrationsDir)
+  .filter((f) => f.endsWith(".sql"))
+  .sort()
+  .map((f) => readFileSync(path.join(migrationsDir, f), "utf8"))
+  .join("\n")
+  .replace(/create extension[^;]+;/i, "");
 const seed = readFileSync(path.join(root, "supabase/seed.sql"), "utf8");
 
 // Minimal stand-ins for what Supabase provides.
@@ -168,5 +175,49 @@ describe("row-level security", () => {
     const [c] = (await db.query<{ n: number }>("select count(*)::int n from expenses where category = 'Staff salary'")).rows;
     expect(c.n).toBe(0);
     await as(OWNER, "select rename_category(id, 'Staff salary') from categories where name = 'Salaries'");
+  });
+});
+
+describe("Google Sheet export", () => {
+  let key: string;
+  beforeAll(async () => {
+    key = (await db.query<{ k: string }>("select create_export_key() k")).rows[0].k;
+  });
+
+  it("only the database admin can create export keys", async () => {
+    await expect(as(OWNER, "select create_export_key()")).rejects.toThrow(/permission denied/);
+    await expect(as(null, "select create_export_key()")).rejects.toThrow(/permission denied/);
+  });
+
+  it("keeps key hashes unreadable through the API", async () => {
+    expect(await as(OWNER, "select * from export_keys")).toHaveLength(0);
+    expect(await as(null, "select * from export_keys")).toHaveLength(0);
+  });
+
+  it("rejects a wrong or missing key", async () => {
+    await expect(as(null, "select ledger_export('nope')")).rejects.toThrow(/Invalid export key/);
+    await expect(as(null, "select ledger_export(null)")).rejects.toThrow(/Invalid export key/);
+  });
+
+  it("matches the app's calculations exactly", async () => {
+    const [{ x }] = await as<{ x: Record<string, any> }>(null, "select ledger_export($1) x", [key]);
+
+    const partners = (await db.query<Partner>("select id, name, email, role, sort from partners order by sort")).rows;
+    const receipts = (await db.query<Receipt>("select id, to_char(date,'YYYY-MM-DD') date, from_partner, to_partner, amount::float8 amount, note, created_by, created_at::text from receipts")).rows;
+    const expenses = (
+      await db.query<Expense>("select id, receipt_id, paid_by, to_char(date,'YYYY-MM-DD') date, category, amount::float8 amount, note, source::text, created_by, created_at::text from expenses")
+    ).rows;
+
+    expect(x.receipts).toHaveLength(receipts.length);
+    expect(x.expenses).toHaveLength(expenses.length);
+
+    const t = totals(receipts, expenses);
+    expect(x.totals).toEqual({ received: t.received, spent: t.spent, left: t.left, direct: t.direct });
+
+    expect(x.partners).toEqual(
+      partnerTotals(partners, receipts, expenses).map((p) => [p.partner.name, p.sent, p.paidDirectly, p.contributed, p.receiver?.spent ?? null, p.receiver?.holding ?? null]),
+    );
+    expect(x.categories).toEqual(byCategory(expenses).map((c) => [c.category, c.amount]));
+    expect(x.months).toEqual(byMonth(receipts, expenses).map((m) => [m.month, m.received, m.spent, m.direct]));
   });
 });
