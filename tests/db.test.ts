@@ -221,3 +221,22 @@ describe("Google Sheet export", () => {
     expect(x.months).toEqual(byMonth(receipts, expenses).map((m) => [m.month, m.received, m.spent, m.direct]));
   });
 });
+
+describe("passcode mode (server uses the secret key)", () => {
+  it("lets the service role rename categories", async () => {
+    await db.exec(`select set_config('request.jwt.claims', '{"role":"service_role"}', false)`);
+    await db.query("select rename_category(id, 'Rent') from categories where name = 'Office rent'");
+    await db.query("select rename_category(id, 'Office rent') from categories where name = 'Rent'");
+    await db.exec(`select set_config('request.jwt.claims', '', false)`);
+    expect((await db.query("select 1 from categories where name = 'Office rent'")).rows).toHaveLength(1);
+  });
+
+  it("keeps the created_by the server sends", async () => {
+    await db.exec(`select set_config('request.jwt.claims', '{"role":"service_role"}', false)`);
+    const [r] = (
+      await db.query<{ created_by: string }>("insert into receipts (date, from_partner, to_partner, amount, created_by) values ('2026-12-01', $1, $2, 10, $2) returning created_by", [ids.az, ids.ju])
+    ).rows;
+    await db.exec(`select set_config('request.jwt.claims', '', false)`);
+    expect(r.created_by).toBe(ids.ju);
+  });
+});

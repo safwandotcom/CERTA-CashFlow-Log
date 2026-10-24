@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatBDT, formatDate, friendlyDbError, parseAmount, today } from "@/lib/ledger";
+import { addExpense, deleteRecord } from "@/app/actions";
+import { formatBDT, formatDate, parseAmount, today } from "@/lib/ledger";
 import type { LedgerData } from "./Ledger";
 import { AmountInput, DeleteButton, Empty, FormMsg, Who, type Msg } from "./ui";
 
 export default function DirectTab({ data }: { data: LedgerData }) {
-  const { partners, categories, expenses, supabase, reload, partnerName, partnerColor, enteredBy } = data;
+  const { partners, categories, expenses, reload, partnerName, partnerColor, enteredBy } = data;
   const [by, setBy] = useState("");
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
@@ -33,9 +34,9 @@ export default function DirectTab({ data }: { data: LedgerData }) {
     if (!date) return setMsg({ text: "Pick the date paid.", err: true });
     if (!category) return setMsg({ text: "Pick a category.", err: true });
     setBusy(true);
-    const { error } = await supabase.from("expenses").insert({ source: "direct", receipt_id: null, paid_by: by, date, category, amount: a, note: note.trim().slice(0, 200) });
+    const res = await addExpense({ source: "direct", receiptId: null, paidBy: by, date, category, amount: a, note });
     setBusy(false);
-    if (error) return setMsg({ text: friendlyDbError(error.message), err: true });
+    if ("error" in res) return setMsg({ text: res.error, err: true });
     setMsg({ text: `Logged ${formatBDT(a)} paid by ${partnerName(by)}.` });
     setAmount("");
     setNote("");
@@ -43,8 +44,8 @@ export default function DirectTab({ data }: { data: LedgerData }) {
   }
 
   const del = (id: string) => async () => {
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
-    if (error) return friendlyDbError(error.message);
+    const res = await deleteRecord("expenses", id);
+    if ("error" in res) return res.error;
     await reload();
     return null;
   };

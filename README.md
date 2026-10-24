@@ -8,7 +8,9 @@ It records three things:
 2. **Expenses paid from money received**: each one is logged against the receipt it came from, and can't exceed what's left on it.
 3. **Paid by partners**: expenses a partner pays from his own pocket.
 
-Built with Next.js (App Router), TypeScript, Tailwind CSS and Supabase (auth, Postgres, realtime, row-level security). It deploys to Vercel's free tier.
+Built with Next.js (App Router), TypeScript, Tailwind CSS and Supabase Postgres. It deploys to Vercel's free tier.
+
+**Access:** one shared passcode, entered once per device and remembered for a year. There are no accounts. The browser never talks to the database: every read and write goes through the app's server, which uses a secret key that never reaches the page. With the public key alone, the database returns nothing.
 
 ## Project layout
 
@@ -19,44 +21,32 @@ Built with Next.js (App Router), TypeScript, Tailwind CSS and Supabase (auth, Po
 | `lib/ledger.ts` | All the calculations (balances, totals, per partner, by category, by month, CSV) |
 | `components/` | The four screens: Money received, Paid by partners, Summary, Settings |
 | `tests/ledger.test.ts` | Calculation tests |
+| `tests/passcode.test.ts` | Passcode cookie checks |
 | `tests/db.test.ts` | Runs the real migration on in-memory Postgres to test the trigger and access rules |
+| `supabase/migrations/20261026000000_passcode_mode.sql` | Lets the server's secret key rename categories |
+| `app/actions.ts` | Server actions: every read and write, each checking the passcode cookie |
 | `supabase/migrations/20261025000000_sheet_export.sql` | Read-only, key-protected export used by the Google Sheet |
 | `google-sheets/Code.gs` | Apps Script that copies the ledger into the Google Sheet every 5 minutes |
 | `docs/` | The original build prompt and the single-page reference design |
 
 ## 1. Create the Supabase project
 
-1. Sign in at [supabase.com](https://supabase.com) and click **New project**. Pick the **Singapore** region (closest to Bangladesh) and set a database password.
-2. When it's ready, open **SQL Editor → New query**, paste the whole of `supabase/migrations/20261024000000_init.sql` and click **Run**.
-3. Open `supabase/seed.sql` and **replace the placeholder emails** with the address each partner will sign in with. Use lowercase. Towfiq is the `owner`.
-4. Paste the edited seed into a new query and **Run** it.
-5. Go to **Authentication → Sign In / Providers**:
-   - Keep **Email** enabled (magic links).
-   - Turn **off** "Allow new users to sign up". Only invited partners can then get in.
-6. Go to **Authentication → URL Configuration**:
-   - **Site URL**: your Vercel URL once you have one (use `http://localhost:3000` for now).
-   - **Redirect URLs**: add `http://localhost:3000/auth/callback` and, later, `https://YOUR-APP.vercel.app/auth/callback`.
+1. Sign in at [supabase.com](https://supabase.com) and click **New project**. Pick a region near Bangladesh (Mumbai or Singapore).
+2. Apply the database. With the CLI: `npx supabase login`, `npx supabase link --project-ref YOUR-REF`, `npx supabase db push`, then `npx supabase db query --linked -f supabase/seed.sql`. Without it, paste each file in `supabase/migrations/` (in order), then `supabase/seed.sql`, into **SQL Editor** and run them.
 
-> Using the Supabase CLI instead? Run `supabase link` then `supabase db push`, and run `seed.sql` in the SQL editor.
-
-### Optional: Google sign-in
-
-1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create an **OAuth client ID** of type *Web application*.
-2. Under **Authorised redirect URIs**, add the callback URL Supabase shows under **Authentication → Sign In / Providers → Google** (it looks like `https://YOUR-PROJECT.supabase.co/auth/v1/callback`).
-3. Paste the client ID and secret into the Supabase Google provider and enable it.
-
-A partner signing in with Google must use the same email that's in the `partners` table.
+No Supabase Auth setup is needed.
 
 ## 2. Environment variables
 
-Copy `.env.example` to `.env.local` and fill in both values from **Supabase → Project Settings → API Keys**. Use the **publishable** key (`sb_publishable_…`); a legacy anon key also works if your project still has them enabled:
+Copy `.env.example` to `.env.local` and fill in:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
+SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_...      # Project Settings → API Keys → Secret key
+APP_PASSCODE=your-passcode
 ```
 
-The publishable key is safe in the browser: row-level security means it can read and write nothing unless a signed-in partner is using it. **Never** put the secret (`sb_secret_…`) or `service_role` key in this app.
+All three are server-only. None has the `NEXT_PUBLIC_` prefix, so none of them is sent to the browser. Never commit `.env.local`. To sign every device out, change `APP_PASSCODE`.
 
 ## 3. Run locally
 
@@ -71,26 +61,15 @@ npm run build      # production build check
 
 ## 4. Deploy to Vercel
 
-1. Push this repo to GitHub (already done if you're reading this there).
-2. On [vercel.com](https://vercel.com), click **Add New → Project** and import the repo. Vercel detects Next.js.
-3. Under **Environment Variables**, add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-4. Click **Deploy**.
-5. Back in Supabase **Authentication → URL Configuration**, set **Site URL** to the Vercel URL and add `https://YOUR-APP.vercel.app/auth/callback` to the redirect URLs.
+1. On [vercel.com](https://vercel.com), click **Add New → Project** and import this GitHub repo. Vercel detects Next.js.
+2. Under **Environment Variables**, add `SUPABASE_URL`, `SUPABASE_SECRET_KEY` and `APP_PASSCODE`, with the same values as `.env.local`.
+3. Click **Deploy**. Open the URL, enter the passcode, and pick who you're entering as (top right).
 
-## 5. Invite the partners
+## 5. Using it
 
-Each partner needs two things: a row in `partners` (from the seed) and a Supabase user.
-
-1. In Supabase, open **Authentication → Users → Add user → Send invitation**.
-2. Enter the partner's email, exactly as it appears in `partners`. Repeat for all three.
-3. Each partner gets an email. After that, they open the app, type their email and tap **Email me a sign-in link**, or use **Continue with Google**.
-
-To **change a partner's email** later, update both places:
-
-- In **Table Editor → partners**, edit the `email` (lowercase).
-- Invite the new address under **Authentication → Users**.
-
-Anyone who signs in with an email that isn't in `partners` sees a "This ledger is for invited partners" page and can't read or write anything.
+- **Entering as** (top right) sets the "Entered by" name on new entries. It's remembered per device and defaults to Jubair.
+- **Lock this device** removes the unlock from that browser.
+- Changes from another device appear within 20 seconds, or straight away when you switch back to the tab.
 
 ## 6. Copy everything into the Google Sheet
 
@@ -116,7 +95,7 @@ Every other tab in the spreadsheet is left alone.
 6. Reload the spreadsheet. A **CashFlow Log** menu appears.
 7. Choose **CashFlow Log → Set up sync…** and approve the Google permissions it asks for. Then paste three values:
    - the Supabase URL
-   - the anon key
+   - the publishable key (starts with `sb_publishable_`)
    - the export key
 8. Choose **CashFlow Log → Turn on auto-sync**.
 9. Set **File → Settings → Time zone** to *(GMT+06:00) Dhaka* so the "Entered at" times display correctly.
@@ -135,8 +114,7 @@ Every other tab in the spreadsheet is left alone.
 | Paying partner is the receipt's receiver | Set automatically | The trigger overwrites `paid_by` |
 | Receipt with expenses can't be deleted | Delete button says "Delete its expenses first" | `on delete restrict` foreign key |
 | Sent by ≠ Received by | Form check | `receipts_sender_differs` check constraint |
-| Who entered it | Shown as "Entered by" | `created_by` and `created_at` are stamped by a trigger and can't be faked |
-| Only partners can read/write | Sign-in required | Row-level security on every table |
-| Only the owner edits names and categories | Settings are read-only for others | RLS policies plus the owner-only `rename_category` function |
+| Who entered it | Shown as "Entered by", from the device's "Entering as" choice | `created_by` and `created_at` set on insert and can't be changed afterwards |
+| Only you can read/write | Passcode required; data only flows through the server | Row-level security on every table: the public key sees nothing |
 
 Entries are never edited, only added or deleted. To fix a mistake, delete the entry and log it again.

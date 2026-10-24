@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { addExpense, addReceipt, deleteRecord } from "@/app/actions";
 import {
   checkExpense,
   formatBDT,
   formatDate,
-  friendlyDbError,
   groupInput,
   openReceipts,
   parseAmount,
@@ -41,7 +41,7 @@ export default function ReceivedTab({ data, balances }: { data: LedgerData; bala
 }
 
 function ReceiptForm({ data }: { data: LedgerData }) {
-  const { partners, supabase, reload, partnerName } = data;
+  const { partners, reload, partnerName } = data;
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -65,9 +65,9 @@ function ReceiptForm({ data }: { data: LedgerData }) {
     if (from === to) return setMsg({ text: "Sent by and Received by must be different partners.", err: true });
     if (!date) return setMsg({ text: "Pick the date received.", err: true });
     setBusy(true);
-    const { error } = await supabase.from("receipts").insert({ date, from_partner: from, to_partner: to, amount: a, note: note.trim().slice(0, 200) });
+    const res = await addReceipt({ date, from, to, amount: a, note });
     setBusy(false);
-    if (error) return setMsg({ text: friendlyDbError(error.message), err: true });
+    if ("error" in res) return setMsg({ text: res.error, err: true });
     setMsg({ text: `Logged ${formatBDT(a)} received by ${partnerName(to)}. Now log what it's spent on.` });
     setAmount("");
     setNote("");
@@ -122,7 +122,7 @@ function ReceiptForm({ data }: { data: LedgerData }) {
 }
 
 function ExpenseForm({ data, balances }: { data: LedgerData; balances: ReceiptBalance[] }) {
-  const { categories, supabase, reload, partnerName } = data;
+  const { categories, reload, partnerName } = data;
   const open = openReceipts(balances);
   const [fund, setFund] = useState("");
   const [category, setCategory] = useState("");
@@ -158,19 +158,11 @@ function ExpenseForm({ data, balances }: { data: LedgerData; balances: ReceiptBa
     if (!date) return setMsg({ text: "Pick the date paid.", err: true });
     if (!category) return setMsg({ text: "Pick a category.", err: true });
     setBusy(true);
-    const { error } = await supabase.from("expenses").insert({
-      source: "receipt",
-      receipt_id: selected.id,
-      paid_by: selected.to_partner, // the database enforces this too
-      date,
-      category,
-      amount: a,
-      note: note.trim().slice(0, 200),
-    });
+    const res = await addExpense({ source: "receipt", receiptId: selected.id, paidBy: selected.to_partner, date, category, amount: a, note });
     setBusy(false);
-    if (error) {
+    if ("error" in res) {
       reload();
-      return setMsg({ text: friendlyDbError(error.message), err: true });
+      return setMsg({ text: res.error, err: true });
     }
     setMsg({ text: `Logged ${formatBDT(a)} · ${category}. ${formatBDT(selected.left - a)} left from this money.` });
     setNote("");
@@ -241,12 +233,12 @@ function ExpenseForm({ data, balances }: { data: LedgerData; balances: ReceiptBa
 }
 
 function ReceiptCard({ r, data }: { r: ReceiptBalance; data: LedgerData }) {
-  const { supabase, reload, partnerName, partnerColor, enteredBy } = data;
+  const { reload, partnerName, partnerColor, enteredBy } = data;
   const pct = Math.min(100, (r.spent / (r.amount || 1)) * 100);
 
   const del = (table: "receipts" | "expenses", id: string) => async () => {
-    const { error } = await supabase.from(table).delete().eq("id", id);
-    if (error) return friendlyDbError(error.message);
+    const res = await deleteRecord(table, id);
+    if ("error" in res) return res.error;
     await reload();
     return null;
   };

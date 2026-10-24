@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { loadLedger, lock, setActingAs, type LedgerSnapshot } from "@/app/actions";
 import { formatBDT, receiptBalances, totals, type Category, type Expense, type Partner, type Receipt } from "@/lib/ledger";
 import { PARTNER_COLORS } from "./ui";
 import ReceivedTab from "./ReceivedTab";
@@ -16,84 +16,45 @@ const TABS = [
   { id: "settings", label: "Settings" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
+const REFRESH_MS = 20_000;
 
 export interface LedgerData {
-  me: Partner;
   partners: Partner[];
   categories: Category[];
   receipts: Receipt[];
   expenses: Expense[];
-  supabase: ReturnType<typeof createClient>;
   reload: () => Promise<void>;
   partnerName: (id: string | null) => string;
   partnerColor: (id: string) => string;
   enteredBy: (id: string | null) => string;
 }
 
-// PostgREST can return numeric columns as strings; normalise once here.
-const money = <T extends { amount: unknown }>(rows: T[] | null) => (rows ?? []).map((r) => ({ ...r, amount: Number(r.amount) }));
-
-export default function Ledger({ me }: { me: Partner }) {
-  const supabase = useMemo(() => createClient(), []);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [status, setStatus] = useState<"loading" | "live" | "offline">("loading");
+export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
+  const [snap, setSnap] = useState(initial);
+  const [status, setStatus] = useState<"live" | "offline">("live");
   const [tab, setTab] = useState<Tab>("received");
-
-  const loaders = useMemo(
-    () => ({
-      partners: async () => {
-        const { data } = await supabase.from("partners").select("id,name,email,role,sort").order("sort");
-        if (data) setPartners(data as Partner[]);
-      },
-      categories: async () => {
-        const { data } = await supabase.from("categories").select("id,name,sort").order("sort");
-        if (data) setCategories(data as Category[]);
-      },
-      receipts: async () => {
-        const { data, error } = await supabase.from("receipts").select("*").order("date", { ascending: false });
-        if (error) throw error;
-        setReceipts(money(data) as Receipt[]);
-      },
-      expenses: async () => {
-        const { data, error } = await supabase.from("expenses").select("*").order("date", { ascending: false });
-        if (error) throw error;
-        setExpenses(money(data) as Expense[]);
-      },
-    }),
-    [supabase],
-  );
 
   const reload = useCallback(async () => {
     try {
-      await Promise.all(Object.values(loaders).map((f) => f()));
+      setSnap(await loadLedger());
+      setStatus("live");
     } catch {
       setStatus("offline");
     }
-  }, [loaders]);
+  }, []);
 
+  // Keep other devices' changes flowing in: refresh on a timer while visible, and on focus.
   useEffect(() => {
-    reload();
-    // Any change by any partner refetches that table, so everyone sees the same ledger.
-    const channel = supabase.channel("ledger");
-    (Object.keys(loaders) as (keyof typeof loaders)[]).forEach((table) =>
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, () => loaders[table]().catch(() => {})),
-    );
-    channel.subscribe((s) => {
-      if (s === "SUBSCRIBED") {
-        setStatus("live");
-        reload(); // catch anything that changed while connecting
-      } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") setStatus("offline");
-    });
-    const onFocus = () => reload();
-    window.addEventListener("focus", onFocus);
+    const tick = () => document.visibilityState === "visible" && reload();
+    const id = setInterval(tick, REFRESH_MS);
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", tick);
     return () => {
-      window.removeEventListener("focus", onFocus);
-      supabase.removeChannel(channel);
+      clearInterval(id);
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", tick);
     };
-  }, [supabase, loaders, reload]);
+  }, [reload]);
 
   useEffect(() => {
     const fromHash = () => {
@@ -110,18 +71,22 @@ export default function Ledger({ me }: { me: Partner }) {
     history.replaceState(null, "", `#${t}`);
   };
 
+  async function changeActor(id: string) {
+    setSnap((s) => ({ ...s, actingAs: id }));
+    await setActingAs(id);
+  }
+
+  const { partners, categories, receipts, expenses, actingAs } = snap;
   const byId = useMemo(() => new Map(partners.map((p, i) => [p.id, { p, color: PARTNER_COLORS[i % PARTNER_COLORS.length] }])), [partners]);
   const data: LedgerData = {
-    me,
     partners,
     categories,
     receipts,
     expenses,
-    supabase,
     reload,
     partnerName: (id) => (id && byId.get(id)?.p.name) || "A partner",
     partnerColor: (id) => byId.get(id)?.color ?? "var(--muted)",
-    enteredBy: (id) => (!id ? "" : id === me.id ? "You" : byId.get(id)?.p.name ?? "A partner"),
+    enteredBy: (id) => (id && byId.get(id)?.p.name) || "",
   };
 
   const t = totals(receipts, expenses);
@@ -136,14 +101,21 @@ export default function Ledger({ me }: { me: Partner }) {
           <h1 className="font-display text-[clamp(26px,6vw,36px)] font-extrabold leading-[1.1] tracking-tight">CERTA&amp; Advisory CashFlow Log</h1>
           <p className="mt-1 max-w-[56ch] text-muted">Log money when it's received, log each expense against the money it came from, and log anything a partner pays directly.</p>
         </div>
-        <div className="grid justify-items-end gap-1 text-xs text-muted">
-          <span aria-live="polite">
-            {status === "loading" ? "Connecting…" : status === "live" ? `Live · ${count} ${count === 1 ? "entry" : "entries"}` : "Offline · changes from others may be delayed"}
-          </span>
-          <form action="/auth/signout" method="post" className="flex items-center gap-2">
-            <span>{me.name}</span>
+        <div className="grid justify-items-start gap-1.5 text-xs text-muted sm:justify-items-end">
+          <span aria-live="polite">{status === "live" ? `Up to date · ${count} ${count === 1 ? "entry" : "entries"}` : "Can't reach the ledger · retrying"}</span>
+          <label className="flex items-center gap-2">
+            Entering as
+            <select className="input w-auto py-1 text-xs" value={actingAs ?? ""} onChange={(e) => changeActor(e.target.value)}>
+              {partners.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <form action={lock}>
             <button type="submit" className="cursor-pointer underline underline-offset-2">
-              Sign out
+              Lock this device
             </button>
           </form>
         </div>

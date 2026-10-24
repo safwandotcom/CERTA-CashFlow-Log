@@ -45,9 +45,10 @@ export function DeleteButton({ onDelete, blockedReason }: { onDelete: () => Prom
     }
   }
 
-  const label =
-    state === "confirm" ? "Tap to confirm" : state === "busy" ? "Deleting…" : state === "blocked" ? blockedReason : state === "error" ? error : "Delete";
-  const armed = state === "confirm" || state === "error" || state === "blocked";
+  // A "blocked" note goes away as soon as the reason does (e.g. its expenses were deleted).
+  const blocked = state === "blocked" && !!blockedReason;
+  const label = state === "confirm" ? "Tap to confirm" : state === "busy" ? "Deleting…" : blocked ? blockedReason : state === "error" ? error : "Delete";
+  const armed = state === "confirm" || state === "error" || blocked;
   return (
     <button
       type="button"
