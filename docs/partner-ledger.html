@@ -1,0 +1,411 @@
+<title>CERTA&amp; Advisory CashFlow Log</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: totals strip, then tabs that mirror the three things people record (money received + its spending, partner payments) and a summary */
+:root{
+  --bg:#f6f4ef; --surface:#ffffff; --ink:#1d2421; --muted:#66706b; --line:#e2ded4;
+  --accent:#a3312b; --accent-soft:#f6e3e0; --green:#1f7a4f; --green-soft:#e1f1e7; --amber:#9a6a12; --amber-soft:#f6ecd6;
+  --p0:#a3312b; --p1:#1d5f8a; --p2:#6b4f9a;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#151917; --surface:#1e2421; --ink:#ecebe6; --muted:#9aa39e; --line:#313935;
+  --accent:#e2675e; --accent-soft:#3a2321; --green:#5cc48e; --green-soft:#1b3326; --amber:#e0b25a; --amber-soft:#3a2f18;
+  --p0:#e2675e; --p1:#6fb1de; --p2:#b49ae0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#151917; --surface:#1e2421; --ink:#ecebe6; --muted:#9aa39e; --line:#313935;
+  --accent:#e2675e; --accent-soft:#3a2321; --green:#5cc48e; --green-soft:#1b3326; --amber:#e0b25a; --amber-soft:#3a2f18;
+  --p0:#e2675e; --p1:#6fb1de; --p2:#b49ae0; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:960px;margin:0 auto;display:grid;gap:20px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(26px,6vw,36px);letter-spacing:-.02em;margin:0;line-height:1.1}
+h2{font-family:var(--display);font-weight:600;font-size:19px;margin:0;text-wrap:balance}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px}
+header p{margin:4px 0 0;color:var(--muted);max-width:56ch}
+.status{font-size:12px;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:14px;min-width:0}
+.totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.totals div{background:var(--surface);padding:12px 14px;display:grid;gap:2px;min-width:0}
+.totals b{font-family:var(--mono);font-size:17px;font-weight:500;overflow-wrap:anywhere}
+@media (max-width:620px){.totals{grid-template-columns:repeat(2,minmax(0,1fr))}}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{font:inherit;font-weight:500;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:10px 12px;cursor:pointer;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.f{display:grid;gap:4px;min-width:0}
+.f.full{grid-column:1/-1}
+@media (max-width:620px){form.three{grid-template-columns:1fr 1fr}form.three .span2{grid-column:1/-1}}
+label{font-size:12px;font-weight:600;color:var(--muted)}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:9px 10px;width:100%;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 16px;background:var(--accent);color:#fff;cursor:pointer}
+.btn.green{background:var(--green)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.actions{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.msg{font-size:13px;color:var(--muted)} .msg.err{color:var(--accent)}
+.hint{font-size:13px;color:var(--muted);margin:0;max-width:65ch}
+.who{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--pc);flex:none}
+.note{color:var(--muted);font-size:13px}
+.del{font:inherit;font-size:12px;background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:3px 8px;cursor:pointer}
+.del.confirm{border-color:var(--accent);color:var(--accent)}
+.empty{padding:24px 12px;text-align:center;color:var(--muted);display:grid;gap:6px;justify-items:center}
+.empty strong{color:var(--ink);font-family:var(--display);font-size:17px}
+.receipt{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.receipt>.top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:12px 14px;background:var(--green-soft)}
+.receipt>.top .amt{font-family:var(--mono);font-size:17px;font-weight:500;color:var(--green)}
+.receipt>.top .grow{flex:1;min-width:160px}
+.meter{height:6px;background:var(--line)}
+.meter span{display:block;height:100%;background:var(--accent)}
+.lines{display:grid}
+.line{display:grid;grid-template-columns:96px minmax(0,1fr) auto auto;gap:10px;align-items:start;padding:10px 14px;border-top:1px solid var(--line);font-size:14px}
+.line .amt{font-family:var(--mono);text-align:right;white-space:nowrap}
+.rfoot{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.rfoot b{color:var(--ink);font-family:var(--mono);font-weight:500}
+.rfoot .left{margin-left:auto}
+@media (max-width:520px){.line{grid-template-columns:minmax(0,1fr) auto auto}.line .d{grid-column:1/-1;font-size:12px;color:var(--muted)}}
+.tablewrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+th{text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
+td{padding:10px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+td.amt,th.amt{text-align:right}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:720px){.pcards{grid-template-columns:1fr}}
+.pcard{border-top:3px solid var(--pc)}
+.rows{display:grid;gap:6px;margin:0}
+.rows div{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.rows dt{color:var(--muted)} .rows dd{margin:0}
+.net{border-top:1px dashed var(--line);padding-top:8px;font-weight:600}
+.cat{display:grid;gap:6px}
+.cat div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;font-size:14px}
+.cat .track{grid-column:1/-1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.cat .track span{display:block;height:100%;background:var(--accent)}
+.headrow{display:flex;gap:6px;align-items:center}
+.headrow input:first-child{width:4.5em;flex:none}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Shared business ledger · BDT</div>
+      <h1>CERTA&amp; Advisory CashFlow Log</h1>
+      <p>Log money when it's received, log each expense against the money it came from, and log anything a partner pays directly.</p>
+    </div>
+    <div class="status" id="status" aria-live="polite">Connecting to the ledger…</div>
+  </header>
+
+  <section class="totals" aria-label="Totals">
+    <div><span class="eyebrow">Money received</span><b id="tRec">৳0</b></div>
+    <div><span class="eyebrow">Spent from it</span><b id="tSpent">৳0</b></div>
+    <div><span class="eyebrow">Left in hand</span><b id="tLeft">৳0</b></div>
+    <div><span class="eyebrow">Paid by partners</span><b id="tDirect">৳0</b></div>
+  </section>
+
+  <nav role="tablist" aria-label="Views">
+    <button role="tab" data-tab="received" aria-selected="true">Money received</button>
+    <button role="tab" data-tab="direct" aria-selected="false">Paid by partners</button>
+    <button role="tab" data-tab="summary" aria-selected="false">Summary</button>
+    <button role="tab" data-tab="partners" aria-selected="false">Partners</button>
+  </nav>
+
+  <section id="v-received" class="wrap" style="max-width:none;width:100%">
+    <div class="two">
+      <div class="card">
+        <h2>Step 1 · Log money received</h2>
+        <form id="recForm" novalidate>
+          <div class="f"><label for="rFrom">Sent by</label><select id="rFrom"></select></div>
+          <div class="f"><label for="rTo">Received by</label><select id="rTo"></select></div>
+          <div class="f"><label for="rAmount">Amount (৳)</label><input id="rAmount" inputmode="decimal" placeholder="60,000" autocomplete="off"></div>
+          <div class="f"><label for="rDate">Date received</label><input id="rDate" type="date"></div>
+          <div class="f full"><label for="rNote">Note</label><input id="rNote" placeholder="e.g. November salaries, operational cost and rent" autocomplete="off"></div>
+          <div class="actions"><button class="btn green" type="submit" id="rBtn">Log money received</button><span class="msg" id="rMsg" aria-live="polite"></span></div>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Step 2 · Log an expense from it</h2>
+        <form id="spForm" novalidate>
+          <div class="f full"><label for="sFund">Paid from</label><select id="sFund"></select></div>
+          <div class="f"><label for="sCat">Category</label>
+            <select id="sCat"><option>Staff salary</option><option>Staff operational cost</option><option>Office rent</option><option>Utilities &amp; internet</option><option>Office supplies</option><option>Licences &amp; fees</option><option>Other</option></select></div>
+          <div class="f" id="headWrap"><label for="sHeads">Staff × rate</label>
+            <div class="headrow"><input id="sHeads" inputmode="numeric" value="3" aria-label="Number of staff"><span class="msg">×</span><input id="sRate" inputmode="decimal" value="5000" aria-label="Cost per staff"></div></div>
+          <div class="f"><label for="sAmount">Amount (৳)</label><input id="sAmount" inputmode="decimal" placeholder="15,000" autocomplete="off"></div>
+          <div class="f"><label for="sDate">Date paid</label><input id="sDate" type="date"></div>
+          <div class="f full"><label for="sNote">Note</label><input id="sNote" placeholder="e.g. November salary, 3 staff" autocomplete="off"></div>
+          <div class="actions"><button class="btn" type="submit" id="sBtn">Log expense</button><span class="msg" id="sMsg" aria-live="polite"></span></div>
+        </form>
+      </div>
+    </div>
+    <div id="receipts" style="display:grid;gap:14px"></div>
+  </section>
+
+  <section id="v-direct" class="wrap" style="max-width:none;width:100%" hidden>
+    <div class="card">
+      <h2>Log a payment a partner made for the business</h2>
+      <p class="hint">For expenses a partner pays from his own pocket, not from money received. For example, Towfiq paying subscriptions and technology.</p>
+      <form id="dForm" class="three" novalidate style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div class="f"><label for="dPartner">Paid by</label><select id="dPartner"></select></div>
+        <div class="f"><label for="dCat">Category</label>
+          <select id="dCat"><option>Subscriptions</option><option>Technology</option><option>Staff salary</option><option>Staff operational cost</option><option>Office rent</option><option>Utilities &amp; internet</option><option>Licences &amp; fees</option><option>Marketing</option><option>Other</option></select></div>
+        <div class="f"><label for="dAmount">Amount (৳)</label><input id="dAmount" inputmode="decimal" placeholder="4,500" autocomplete="off"></div>
+        <div class="f"><label for="dDate">Date paid</label><input id="dDate" type="date"></div>
+        <div class="f span2" style="grid-column:span 2"><label for="dNote">Note</label><input id="dNote" placeholder="e.g. Google Workspace, November" autocomplete="off"></div>
+        <div class="actions"><button class="btn" type="submit" id="dBtn">Log payment</button><span class="msg" id="dMsg" aria-live="polite"></span></div>
+      </form>
+    </div>
+    <div class="card">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Date</th><th>Paid by</th><th>Details</th><th class="amt">Amount</th><th>Entered by</th><th></th></tr></thead>
+          <tbody id="dBody"></tbody>
+        </table>
+      </div>
+      <div class="msg" id="dFoot"></div>
+    </div>
+  </section>
+
+  <section id="v-summary" class="wrap" style="max-width:none;width:100%" hidden>
+    <div class="pcards" id="pcards"></div>
+    <div class="two">
+      <div class="card"><h2>Expenses by category</h2><div class="cat" id="cats"></div></div>
+      <div class="card"><h2>By month</h2>
+        <div class="tablewrap"><table style="min-width:420px"><thead><tr><th>Month</th><th class="amt">Received</th><th class="amt">Spent</th><th class="amt">Paid by partners</th></tr></thead><tbody id="months"></tbody></table></div>
+      </div>
+    </div>
+    <div><button class="btn ghost" id="csvBtn" type="button" hidden>Export everything as CSV</button></div>
+  </section>
+
+  <section id="v-partners" class="card" hidden>
+    <h2>Partner names</h2>
+    <form id="nameForm" class="three" novalidate style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div class="f"><label for="n0">Partner 1</label><input id="n0" maxlength="40"></div>
+      <div class="f"><label for="n1">Partner 2</label><input id="n1" maxlength="40"></div>
+      <div class="f span2"><label for="n2">Partner 3</label><input id="n2" maxlength="40"></div>
+      <div class="actions"><button class="btn" type="submit" id="nameBtn">Save names</button><span class="msg" id="nameMsg" aria-live="polite"></span></div>
+    </form>
+    <p class="hint">To let your partners add entries, share this page and give them Contributor access.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const PV = ["--p0","--p1","--p2"];
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const state = {entries:[], names:["Azharul Islam","Jubair Eusuf","Sarker Towfiq Pritom"], db:null, canWrite:true, uid:null, user:null, people:{}, downloads:null};
+  const fmt = n => (n < -0.5 ? "−৳" : "৳") + Math.round(Math.abs(n)).toLocaleString("en-IN");
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
+  const nice = d => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${+dd} ${MON[+m-1]} ${y}`; };
+  const pname = i => esc(state.names[i] || `Partner ${i+1}`);
+  const who = i => `<span class="who" style="--pc:var(${PV[i]})"><span class="dot"></span>${pname(i)}</span>`;
+  const enteredBy = id => !id ? "" : id === state.uid ? "You" : (state.people[id] || "A partner");
+  const amt = v => parseFloat(String(v||"").replace(/[^\d.]/g,""));
+  const sum = (arr, f) => arr.reduce((a,x) => a + (+f(x)||0), 0);
+  ["#rDate","#sDate","#dDate"].forEach(s => $(s).value = today());
+
+  const tabs = [...document.querySelectorAll("nav button")], views = ["received","direct","summary","partners"];
+  const show = t => { tabs.forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t)); views.forEach(v => $("#v-"+v).hidden = v !== t); };
+  tabs.forEach(b => b.addEventListener("click", () => show(b.dataset.tab)));
+  const h = location.hash.slice(1); if (views.includes(h)) show(h);
+
+  const byType = t => state.entries.filter(e => e.type === t);
+  function funds(){
+    const rec = byType("received").slice().sort((a,b) => (a.date||"").localeCompare(b.date||"") || (a.createdAt||"").localeCompare(b.createdAt||""));
+    const spent = byType("spent");
+    const list = rec.map(r => { const lines = spent.filter(s => s.fund === r.id); const used = sum(lines, s => s.amount); return {...r, lines, used, left:(+r.amount||0) - used}; });
+    const orphans = spent.filter(s => !rec.some(r => r.id === s.fund));
+    return {list, orphans};
+  }
+
+  function selects(){
+    const opts = state.names.map((n,i) => `<option value="${i}">${pname(i)}</option>`).join("");
+    for (const [sel, def] of [["#rFrom","0"],["#rTo","1"],["#dPartner","2"]]) { const el = $(sel), cur = el.value; el.innerHTML = opts; el.value = cur || def; }
+    state.names.forEach((n,i) => { const el = $("#n"+i); if (document.activeElement !== el) el.value = n; });
+  }
+  function fundSelect(F){
+    const el = $("#sFund"), cur = el.value, open = F.list.filter(r => r.left > 0.5);
+    el.innerHTML = open.length ? open.slice().reverse().map(r => `<option value="${esc(r.id)}">${nice(r.date)} · ${fmt(r.amount)} from ${pname(r.from)} · ${fmt(r.left)} left</option>`).join("")
+      : `<option value="">No money left to spend. Log money received first.</option>`;
+    if (cur && open.some(r => r.id === cur)) el.value = cur;
+  }
+
+  function syncHeads(){
+    const on = $("#sCat").value === "Staff operational cost";
+    $("#headWrap").hidden = !on;
+    if (on) { const n = amt($("#sHeads").value)||0, r = amt($("#sRate").value)||0; if (n*r > 0) $("#sAmount").value = (n*r).toLocaleString("en-IN"); }
+  }
+  $("#sCat").addEventListener("change", syncHeads); ["#sHeads","#sRate"].forEach(s => $(s).addEventListener("input", syncHeads));
+
+  const BTNS = ["#rBtn","#sBtn","#dBtn","#nameBtn"];
+  async function add(entry, msgEl, btn, ok){
+    msgEl.className = "msg";
+    if (!state.db) { fail(msgEl, "The shared ledger isn't connected, so this can't be saved."); return false; }
+    btn.disabled = true;
+    try { await state.db.collection("entries").add({...entry, createdAt:new Date().toISOString(), createdBy:state.uid || ""}); msgEl.textContent = ok; return true; }
+    catch (err) { fail(msgEl, err && err.code === "invalid_argument" ? "You have view-only access. Ask the owner for Contributor access." : "Couldn't save. Check your connection and try again."); return false; }
+    finally { btn.disabled = !state.canWrite; }
+  }
+  function fail(el, t){ el.className = "msg err"; el.textContent = t; }
+
+  $("#recForm").addEventListener("submit", async e => {
+    e.preventDefault(); const m = $("#rMsg"), a = amt($("#rAmount").value);
+    if (!(a > 0)) return fail(m, "Enter the amount received.");
+    if ($("#rFrom").value === $("#rTo").value) return fail(m, "Sent by and Received by must be different partners.");
+    if (!$("#rDate").value) return fail(m, "Pick the date received.");
+    const en = {type:"received", date:$("#rDate").value, from:+$("#rFrom").value, to:+$("#rTo").value, amount:Math.round(a*100)/100, note:$("#rNote").value.trim().slice(0,200)};
+    if (await add(en, m, $("#rBtn"), `Logged ${fmt(en.amount)} received by ${state.names[en.to]}. Now log what it's spent on.`)) { $("#rAmount").value = ""; $("#rNote").value = ""; }
+  });
+
+  $("#spForm").addEventListener("submit", async e => {
+    e.preventDefault(); const m = $("#sMsg"), a = amt($("#sAmount").value);
+    const r = funds().list.find(x => x.id === $("#sFund").value);
+    if (!r) return fail(m, "Log money received first, then pick it under Paid from.");
+    if (!(a > 0)) return fail(m, "Enter the amount spent.");
+    if (a > r.left + 0.5) return fail(m, `Only ${fmt(r.left)} is left from this money. Log the rest from another receipt, or under Paid by partners.`);
+    if (!$("#sDate").value) return fail(m, "Pick the date paid.");
+    const en = {type:"spent", fund:r.id, by:r.to, date:$("#sDate").value, category:$("#sCat").value, amount:Math.round(a*100)/100, note:$("#sNote").value.trim().slice(0,200)};
+    if (await add(en, m, $("#sBtn"), `Logged ${fmt(en.amount)} · ${en.category}. ${fmt(r.left - en.amount)} left from this money.`)) { $("#sAmount").value = ""; $("#sNote").value = ""; syncHeads(); }
+  });
+
+  $("#dForm").addEventListener("submit", async e => {
+    e.preventDefault(); const m = $("#dMsg"), a = amt($("#dAmount").value);
+    if (!(a > 0)) return fail(m, "Enter the amount paid.");
+    if (!$("#dDate").value) return fail(m, "Pick the date paid.");
+    const en = {type:"direct", partner:+$("#dPartner").value, date:$("#dDate").value, category:$("#dCat").value, amount:Math.round(a*100)/100, note:$("#dNote").value.trim().slice(0,200)};
+    if (await add(en, m, $("#dBtn"), `Logged ${fmt(en.amount)} paid by ${state.names[en.partner]}.`)) { $("#dAmount").value = ""; $("#dNote").value = ""; }
+  });
+
+  $("#nameForm").addEventListener("submit", async e => {
+    e.preventDefault(); const m = $("#nameMsg");
+    const names = [0,1,2].map(i => $("#n"+i).value.trim() || `Partner ${i+1}`);
+    if (!state.db) return fail(m, "The shared ledger isn't connected.");
+    $("#nameBtn").disabled = true;
+    try { await state.db.doc("settings/partners").set({names}); m.className = "msg"; m.textContent = "Saved."; } catch { fail(m, "Couldn't save the names."); }
+    finally { $("#nameBtn").disabled = !state.canWrite; }
+  });
+
+  document.addEventListener("click", async e => {
+    const b = e.target.closest(".del"); if (!b) return;
+    if (b.dataset.block) { b.textContent = "Delete its expenses first"; return; }
+    if (!b.classList.contains("confirm")) { b.classList.add("confirm"); b.textContent = "Tap to confirm"; setTimeout(() => { if (b.isConnected) { b.classList.remove("confirm"); b.textContent = "Delete"; } }, 4000); return; }
+    b.disabled = true; b.textContent = "Deleting…";
+    try { await state.db.collection("entries").doc(b.dataset.id).delete(); } catch { b.textContent = "Couldn't delete"; }
+  });
+  const delBtn = (id, block) => state.canWrite && state.db ? `<button class="del" type="button" data-id="${esc(id)}" ${block ? 'data-block="1"' : ""}>Delete</button>` : "";
+
+  function render(){
+    const F = funds(), D = byType("direct");
+    const rec = sum(F.list, r => r.amount), used = sum(byType("spent"), s => s.amount), dir = sum(D, d => d.amount);
+    $("#tRec").textContent = fmt(rec); $("#tSpent").textContent = fmt(used); $("#tLeft").textContent = fmt(rec - used); $("#tDirect").textContent = fmt(dir);
+    fundSelect(F);
+
+    const R = F.list.slice().reverse();
+    $("#receipts").innerHTML = (R.length ? R.map(r => `
+      <article class="receipt">
+        <div class="top">
+          <span class="amt">${fmt(r.amount)}</span>
+          <span class="grow">${who(r.to)} <span class="note">received from</span> ${who(r.from)}<div class="note">${nice(r.date)}${r.note ? " · " + esc(r.note) : ""}${r.createdBy ? " · entered by " + esc(enteredBy(r.createdBy)) : ""}</div></span>
+          ${delBtn(r.id, r.lines.length > 0)}
+        </div>
+        <div class="meter" aria-hidden="true"><span style="width:${Math.min(100, r.used/(+r.amount||1)*100).toFixed(1)}%"></span></div>
+        <div class="lines">${r.lines.slice().sort((a,b) => (a.date||"").localeCompare(b.date||"")).map(s => `
+          <div class="line"><span class="d num">${nice(s.date)}</span><span>${esc(s.category)}${s.note ? `<div class="note">${esc(s.note)}</div>` : ""}</span><span class="amt">${fmt(s.amount)}</span>${delBtn(s.id)}</div>`).join("") ||
+          `<div class="line"><span class="note" style="grid-column:1/-1">No expenses logged from this money yet.</span></div>`}</div>
+        <div class="rfoot"><span>Spent <b>${fmt(r.used)}</b></span><span class="left">Left <b style="color:${r.left > 0.5 ? "var(--green)" : "var(--muted)"}">${fmt(r.left)}</b></span></div>
+      </article>`).join("") : `<div class="card"><div class="empty"><strong>No money received yet</strong><span>When money comes in, log it in step 1. Each expense paid from it is logged in step 2 and listed under it here.</span></div></div>`)
+      + (F.orphans.length ? `<article class="receipt"><div class="top" style="background:var(--amber-soft)"><span class="grow"><b>Expenses whose receipt was deleted</b></span></div><div class="lines">${F.orphans.map(s => `<div class="line"><span class="d num">${nice(s.date)}</span><span>${esc(s.category)}</span><span class="amt">${fmt(s.amount)}</span>${delBtn(s.id)}</div>`).join("")}</div></article>` : "");
+
+    const DS = D.slice().sort((a,b) => (b.date||"").localeCompare(a.date||""));
+    $("#dBody").innerHTML = DS.length ? DS.map(d => `<tr><td class="num">${nice(d.date)}</td><td>${who(d.partner)}</td><td>${esc(d.category)}${d.note ? `<div class="note">${esc(d.note)}</div>` : ""}</td><td class="amt num">${fmt(d.amount)}</td><td class="note">${esc(enteredBy(d.createdBy))}</td><td>${delBtn(d.id)}</td></tr>`).join("")
+      : `<tr><td colspan="6"><div class="empty"><strong>No partner payments yet</strong><span>Log anything a partner pays for the business from his own money.</span></div></td></tr>`;
+    $("#dFoot").textContent = DS.length ? `${DS.length} ${DS.length === 1 ? "payment" : "payments"} · ${fmt(dir)}` : "";
+
+    $("#pcards").innerHTML = [0,1,2].map(i => {
+      const sent = sum(F.list.filter(r => r.from === i), r => r.amount);
+      const mine = F.list.filter(r => r.to === i), spentFor = sum(mine, r => r.used), held = sum(mine, r => r.left);
+      const direct = sum(D.filter(d => d.partner === i), d => d.amount);
+      return `<article class="card pcard" style="--pc:var(${PV[i]})">
+        <div class="who" style="font-weight:600"><span class="dot"></span>${pname(i)}</div>
+        <dl class="rows num">
+          <div><dt>Money sent</dt><dd>${fmt(sent)}</dd></div>
+          <div><dt>Paid directly</dt><dd>${fmt(direct)}</dd></div>
+          <div class="net"><dt>Total contributed</dt><dd>${fmt(sent + direct)}</dd></div>
+          ${mine.length ? `<div><dt>Spent from money received</dt><dd>${fmt(spentFor)}</dd></div><div><dt>Still holding</dt><dd>${fmt(held)}</dd></div>` : ""}
+        </dl></article>`;
+    }).join("");
+
+    const cats = {}; [...byType("spent"), ...D].forEach(e => { const c = e.category || "Other"; cats[c] = (cats[c]||0) + (+e.amount||0); });
+    const cl = Object.entries(cats).sort((a,b) => b[1]-a[1]), cmax = cl[0]?.[1] || 1;
+    $("#cats").innerHTML = cl.length ? cl.map(([c,v]) => `<div><span>${esc(c)}</span><span class="num">${fmt(v)}</span><div class="track"><span style="width:${(v/cmax*100).toFixed(1)}%"></span></div></div>`).join("") : `<div class="empty">Expenses appear here by category.</div>`;
+
+    const months = {}; const bump = (d,k,v) => { const m = (d||"").slice(0,7); if (!m) return; months[m] = months[m] || {received:0,spent:0,direct:0}; months[m][k] += +v||0; };
+    byType("received").forEach(e => bump(e.date,"received",e.amount)); byType("spent").forEach(e => bump(e.date,"spent",e.amount)); D.forEach(e => bump(e.date,"direct",e.amount));
+    const ml = Object.keys(months).sort().reverse();
+    $("#months").innerHTML = ml.length ? ml.map(m => `<tr><td>${MON[+m.slice(5)-1]} ${m.slice(0,4)}</td><td class="amt num">${fmt(months[m].received)}</td><td class="amt num">${fmt(months[m].spent)}</td><td class="amt num">${fmt(months[m].direct)}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="note">Months appear once entries are logged.</td></tr>`;
+    loadPeople();
+  }
+
+  let busy = false;
+  async function loadPeople(){
+    if (!state.user || busy) return;
+    const ids = [...new Set(state.entries.map(e => e.createdBy).filter(id => id && id !== state.uid && !(id in state.people)))];
+    if (!ids.length) return; busy = true;
+    try { const ps = await state.user.profiles(ids); ids.forEach(id => state.people[id] = (ps && ps[id] && ps[id].name) || "A partner"); }
+    catch { ids.forEach(id => state.people[id] = "A partner"); }
+    busy = false; render();
+  }
+
+  $("#csvBtn").addEventListener("click", async () => {
+    const recById = Object.fromEntries(funds().list.map(r => [r.id, r]));
+    const rows = [["Record","Date","Partner","Received by","Category","Paid from (receipt date)","Note","Amount (BDT)","Entered by"]];
+    state.entries.slice().sort((a,b) => (a.date||"").localeCompare(b.date||"")).forEach(e => {
+      if (e.type === "received") rows.push(["Money received", e.date, state.names[e.from], state.names[e.to], "", "", e.note, e.amount, enteredBy(e.createdBy)]);
+      if (e.type === "spent") rows.push(["Spent from money received", e.date, state.names[e.by], "", e.category, recById[e.fund]?.date || "", e.note, e.amount, enteredBy(e.createdBy)]);
+      if (e.type === "direct") rows.push(["Paid by partner", e.date, state.names[e.partner], "", e.category, "", e.note, e.amount, enteredBy(e.createdBy)]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(",")).join("\n");
+    try { await state.downloads.save({filename:`certa-cashflow-log-${today()}.csv`, data:new Blob([csv],{type:"text/csv"})}); } catch {}
+  });
+
+  selects(); syncHeads(); render();
+  (async () => {
+    const c = window.claude;
+    if (!c || !c.use) { $("#status").textContent = "Preview mode: open the published page to use the shared ledger."; return; }
+    const [db, user, downloads] = await Promise.all([c.use("db"), c.use("user"), c.use("downloads")]);
+    if (downloads) { state.downloads = downloads; $("#csvBtn").hidden = false; }
+    if (!db) { $("#status").textContent = "Sign in to claude.ai to see and add entries."; BTNS.forEach(s => $(s).disabled = true); return; }
+    state.db = db;
+    if (user) {
+      state.user = user;
+      try { state.uid = await user.id(); } catch {}
+      try { if (await user.can("data.write") === false) { state.canWrite = false; BTNS.forEach(s => $(s).disabled = true); } } catch {}
+    }
+    db.doc("settings/partners").onSnapshot(s => {
+      if (s.exists) { const d = s.data(); if (Array.isArray(d.names) && d.names.length === 3) state.names = d.names.map(String); }
+      selects(); render();
+    }, () => {});
+    const ok = e => e.amount > 0 && (
+      (e.type === "received" && [0,1,2].includes(e.from) && [0,1,2].includes(e.to) && e.from !== e.to) ||
+      (e.type === "spent" && typeof e.fund === "string") ||
+      (e.type === "direct" && [0,1,2].includes(e.partner)));
+    db.collection("entries").limit(1000).onSnapshot(s => {
+      state.entries = s.docs.map(d => ({id:d.id, ...d.data()})).filter(ok);
+      $("#status").textContent = state.canWrite ? `Live · ${state.entries.length} ${state.entries.length === 1 ? "entry" : "entries"}` : "View-only access";
+      render();
+    }, () => { $("#status").textContent = "Lost connection to the ledger. Reload the page to reconnect."; });
+  })();
+})();
+</script>

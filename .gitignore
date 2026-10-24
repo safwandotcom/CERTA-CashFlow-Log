@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+.env*.local
+.env
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+# Working spreadsheet, kept out of the repo
+*.xlsx
