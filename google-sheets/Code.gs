@@ -41,7 +41,7 @@ function setUp() {
     return v;
   };
   ask("1 of 3 · Supabase URL", "Supabase → Project Settings → API → Project URL\n(e.g. https://abcd.supabase.co)", "SUPABASE_URL");
-  ask("2 of 3 · Supabase anon key", "Supabase → Project Settings → API → anon public key", "SUPABASE_ANON_KEY");
+  ask("2 of 3 · Supabase publishable key", "Supabase → Project Settings → API Keys → Publishable key (starts with sb_publishable_)", "SUPABASE_ANON_KEY");
   ask("3 of 3 · Export key", "Run  select create_export_key();  in the Supabase SQL editor and paste the result.", "EXPORT_KEY");
   syncNow();
   ui.alert("Sync is set up. Now choose CashFlow Log → Turn on auto-sync.");
@@ -92,7 +92,8 @@ function fetchLedger_() {
   const res = UrlFetchApp.fetch(url.replace(/\/+$/, "") + "/rest/v1/rpc/ledger_export", {
     method: "post",
     contentType: "application/json",
-    headers: { apikey: anon, Authorization: "Bearer " + anon },
+    // Publishable keys (sb_publishable_…) go in the apikey header only. Legacy anon JWTs also need Authorization.
+    headers: /^eyJ/.test(anon) ? { apikey: anon, Authorization: "Bearer " + anon } : { apikey: anon },
     payload: JSON.stringify({ key: key }),
     muteHttpExceptions: true,
   });

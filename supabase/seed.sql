@@ -1,10 +1,9 @@
 -- Partners and categories only. No transactions are seeded.
--- Replace the emails with the addresses each partner will sign in with.
 
 insert into public.partners (name, email, role, sort) values
-  ('Azharul Islam',        'azharul@example.com', 'partner', 0),
-  ('Jubair Eusuf',         'jubair@example.com',  'partner', 1),
-  ('Sarker Towfiq Pritom', 'towfiq@veita.ai',     'owner',   2)
+  ('Azharul Islam',        'support@certaadvisory.com', 'partner', 0),
+  ('Jubair Eusuf',         'info@certaadvisory.com',    'partner', 1),
+  ('Sarker Towfiq Pritom', 'towfiq@certaadvisory.com',  'owner',   2)
 on conflict (email) do nothing;
 
 insert into public.categories (name, sort) values

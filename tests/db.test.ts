@@ -43,8 +43,8 @@ async function as<T = Record<string, unknown>>(email: string | null, sql: string
   }
 }
 
-const JUBAIR = "jubair@example.com";
-const OWNER = "towfiq@veita.ai";
+const JUBAIR = "info@certaadvisory.com";
+const OWNER = "towfiq@certaadvisory.com";
 const STRANGER = "someone@else.com";
 
 async function newReceipt(amount: number) {

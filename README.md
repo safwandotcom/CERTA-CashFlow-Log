@@ -49,14 +49,14 @@ A partner signing in with Google must use the same email that's in the `partners
 
 ## 2. Environment variables
 
-Copy `.env.example` to `.env.local` and fill in both values from **Supabase → Project Settings → API**:
+Copy `.env.example` to `.env.local` and fill in both values from **Supabase → Project Settings → API Keys**. Use the **publishable** key (`sb_publishable_…`); a legacy anon key also works if your project still has them enabled:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
 ```
 
-The anon key is safe in the browser: row-level security means it can read and write nothing unless a signed-in partner is using it. **Never** put the `service_role` key in this app.
+The publishable key is safe in the browser: row-level security means it can read and write nothing unless a signed-in partner is using it. **Never** put the secret (`sb_secret_…`) or `service_role` key in this app.
 
 ## 3. Run locally
 
