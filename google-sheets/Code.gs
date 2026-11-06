@@ -4,15 +4,18 @@
  * Paste into the spreadsheet's Extensions → Apps Script, then use the
  * "CashFlow Log" menu: Set up sync → Turn on auto-sync. See README.
  *
- * Pulls everything from Supabase (ledger_export) and rewrites ONLY the three
- * tabs named below. Other tabs in the spreadsheet are never touched.
+ * Pulls everything from Supabase (ledger_export) and rewrites ONLY the four
+ * tabs named below. Other tabs in the spreadsheet are never touched, except the
+ * obsolete "Ledger – Money received" tab from the old layout, which is removed.
  */
 
 const TABS = {
-  receipts: "Ledger – Money received",
+  revenue: "Ledger – Revenue",
+  investment: "Ledger – Investment",
   expenses: "Ledger – Expenses",
   summary: "Ledger – Summary",
 };
+const OLD_TABS = ["Ledger – Money received"];
 const SYNC_EVERY_MINUTES = 5; // Apps Script allows 1, 5, 10, 15 or 30
 const TZ = "Asia/Dhaka";
 
@@ -71,9 +74,11 @@ function syncLedger() {
   if (!lock.tryLock(30 * 1000)) return;
   try {
     const data = fetchLedger_();
-    writeReceipts_(data.receipts);
+    writeRevenue_(data.revenue);
+    writeInvestment_(data.investment);
     writeExpenses_(data.expenses);
     writeSummary_(data, null);
+    removeOldTabs_();
   } catch (err) {
     writeSummary_(null, err);
     throw err; // also shows in Apps Script → Executions, and Google emails the owner on repeated failures
@@ -137,26 +142,46 @@ function writeTable_(name, header, rows, moneyCols, dateCols, stampCols) {
   return sh;
 }
 
-function writeReceipts_(rows) {
+function writeRevenue_(rows) {
   writeTable_(
-    TABS.receipts,
-    ["Date received", "Sent by", "Received by", "Amount", "Spent", "Left", "Note", "Entered by", "Entered at", "ID"],
-    rows.map((r) => [toDate_(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7] || "", toDate_(r[8]), r[9]]),
-    [4, 5, 6],
+    TABS.revenue,
+    ["Date received", "Company", "Amount", "Note", "Entered by", "Entered at", "ID"],
+    rows.map((r) => [toDate_(r[0]), r[1], r[2], r[3], r[4] || "", toDate_(r[5]), r[6]]),
+    [3],
     [1],
-    [9],
+    [6],
+  );
+}
+
+function writeInvestment_(rows) {
+  writeTable_(
+    TABS.investment,
+    ["Date", "Partner", "How", "Category", "Amount", "Note", "Entered by", "Entered at", "ID"],
+    rows.map((r) => [toDate_(r[0]), r[1], r[2], r[3], r[4], r[5], r[6] || "", toDate_(r[7]), r[8]]),
+    [5],
+    [1],
+    [8],
   );
 }
 
 function writeExpenses_(rows) {
   writeTable_(
     TABS.expenses,
-    ["Date paid", "Type", "Paid by", "Category", "Amount", "Paid from", "Note", "Entered by", "Entered at", "ID"],
-    rows.map((r) => [toDate_(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7] || "", toDate_(r[8]), r[9]]),
-    [5],
+    ["Date paid", "Paid from", "Category", "Amount", "Note", "Entered by", "Entered at", "ID"],
+    rows.map((r) => [toDate_(r[0]), r[1], r[2], r[3], r[4], r[5] || "", toDate_(r[6]), r[7]]),
+    [4],
     [1],
-    [9],
+    [7],
   );
+}
+
+/** Deletes tabs from the old layout so they can't be mistaken for current numbers. */
+function removeOldTabs_() {
+  const ss = SpreadsheetApp.getActive();
+  OLD_TABS.forEach((name) => {
+    const sh = ss.getSheetByName(name);
+    if (sh && ss.getSheets().length > 1) ss.deleteSheet(sh);
+  });
 }
 
 /** Summary tab: last-synced line, totals, partners, categories, months. */
@@ -175,16 +200,15 @@ function writeSummary_(data, err) {
   const put = (rows, money) => blocks.push({ rows, money });
 
   put([[`Last synced ${stamp} (Dhaka) · refreshes every ${SYNC_EVERY_MINUTES} min · edits here are overwritten`]], []);
-  put([["Totals", ""], ["Money received", data.totals.received], ["Spent from it", data.totals.spent], ["Left in hand", data.totals.left], ["Paid by partners", data.totals.direct]], [2]);
   put(
-    [["Partner", "Money sent", "Paid directly", "Total contributed", "Spent from money received", "Still holding"]].concat(
-      data.partners.map((p) => [p[0], p[1], p[2], p[3], p[4] === null ? "" : p[4], p[5] === null ? "" : p[5]]),
-    ),
-    [2, 3, 4, 5, 6],
+    [["Totals", ""], ["Bank balance", data.totals.bank], ["Revenue", data.totals.revenue], ["Partner investment", data.totals.investment], ["Company expenses", data.totals.expenses]],
+    [2],
   );
+  put([["Company", "Revenue"]].concat(data.companies.length ? data.companies : [["No revenue yet", ""]]), [2]);
+  put([["Partner", "Deposited", "Paid from pocket", "Total investment"]].concat(data.partners), [2, 3, 4]);
   put([["Category", "Amount"]].concat(data.categories.length ? data.categories : [["No expenses yet", ""]]), [2]);
   put(
-    [["Month", "Received", "Spent", "Paid by partners"]].concat(
+    [["Month", "Revenue", "Investment", "Expenses"]].concat(
       data.months.map((m) => [monthLabel_(m[0]), m[1], m[2], m[3]]),
     ),
     [2, 3, 4],

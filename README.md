@@ -2,11 +2,16 @@
 
 A shared expense ledger for the three CERTA& Advisory partners. All amounts are in BDT, shown with Indian digit grouping (৳1,23,456).
 
-It records three things:
+All money goes through **the CERTA& Advisory bank account**. The app records:
 
-1. **Money received**: one partner sends money and another receives it.
-2. **Expenses paid from money received**: each one is logged against the receipt it came from, and can't exceed what's left on it.
-3. **Paid by partners**: expenses a partner pays from his own pocket.
+1. **Money in**, which is either:
+   - **Revenue:** another company pays CERTA& Advisory, for example Taj Consultancy paying for staff. You type the company's name.
+   - **Investment:** a partner deposits their own money.
+2. **Company expenses**, paid either:
+   - **from the bank account.** An expense can't be more than the current bank balance.
+   - **by a partner from their own pocket.** It counts as a company expense *and* as that partner's investment, and doesn't change the bank balance.
+
+**Bank balance** = revenue + partner deposits − expenses paid from the bank.
 
 Built with Next.js (App Router), TypeScript, Tailwind CSS and Supabase Postgres. It deploys to Vercel's free tier.
 
@@ -19,13 +24,14 @@ Built with Next.js (App Router), TypeScript, Tailwind CSS and Supabase Postgres.
 | `supabase/migrations/20261024000000_init.sql` | Tables, overspend trigger, row-level security, realtime |
 | `supabase/seed.sql` | The three partners and the categories (no transactions) |
 | `lib/ledger.ts` | All the calculations (balances, totals, per partner, by category, by month, CSV) |
-| `components/` | The four screens: Money received, Paid by partners, Summary, Settings |
+| `components/` | The four screens: Money in, Expenses, Summary, Settings |
 | `tests/ledger.test.ts` | Calculation tests |
 | `tests/passcode.test.ts` | Passcode cookie checks |
 | `tests/db.test.ts` | Runs the real migration on in-memory Postgres to test the trigger and access rules |
 | `supabase/migrations/20261026000000_passcode_mode.sql` | Lets the server's secret key rename categories |
 | `app/actions.ts` | Server actions: every read and write, each checking the passcode cookie |
 | `supabase/migrations/20261025000000_sheet_export.sql` | Read-only, key-protected export used by the Google Sheet |
+| `supabase/migrations/20261106000000_company_account.sql` | Switches to the company bank account model: `money_in` (revenue or investment), bank and pocket expenses, the bank balance rule, and the new sheet export |
 | `google-sheets/Code.gs` | Apps Script that copies the ledger into the Google Sheet every 5 minutes |
 | `docs/` | The original build prompt and the single-page reference design |
 
@@ -75,13 +81,14 @@ npm run build      # production build check
 
 The app's database is the source of truth. A small script inside the Google Sheet copies everything into it every 5 minutes, even when nobody has the sheet open. The sheet is a read-only mirror: edits made in its Ledger tabs are overwritten on the next sync.
 
-The script writes only these three tabs, creating them if they don't exist:
+The script writes only these four tabs, creating them if they don't exist. It also deletes the old *Ledger – Money received* tab from the earlier layout:
 
 | Tab | Contents |
 | --- | --- |
-| **Ledger – Money received** | Every receipt with spent, left, note, entered by/at |
-| **Ledger – Expenses** | Every expense, from money received and paid by partners, with the receipt it came from |
-| **Ledger – Summary** | Last-synced time, totals, partner cards, by category, by month |
+| **Ledger – Revenue** | Every payment from a company, with note, entered by/at |
+| **Ledger – Investment** | Every partner deposit and every expense a partner paid from their own pocket |
+| **Ledger – Expenses** | Every company expense, with "Paid from" (Bank or the partner) |
+| **Ledger – Summary** | Last-synced time, totals, revenue by company, investment by partner, by category, by month |
 
 Every other tab in the spreadsheet is left alone.
 
@@ -104,16 +111,17 @@ Every other tab in the spreadsheet is left alone.
 
 - Use **CashFlow Log → Sync now** any time you want it refreshed immediately.
 - If a sync fails, cell A1 of *Ledger – Summary* says so in red, and the last good numbers stay. Google also emails the script owner about repeated failures.
+- **After updating the app's database** (for example the company bank account change), paste the latest `google-sheets/Code.gs` into Apps Script again, save, and choose **Sync now**. The export key and settings stay the same.
 - **If the export key leaks:** run `delete from export_keys;` then `select create_export_key();`, and enter the new key under **Set up sync…**. The key can only read the ledger, never change it.
 
 ## How the rules are enforced
 
 | Rule | In the app | In the database |
 | --- | --- | --- |
-| Expense can't exceed what's left on its receipt | Checked before saving, with the "Only ৳X is left…" message | `check_expense_within_receipt` trigger locks the receipt row, so two partners saving at once can't both overspend |
-| Paying partner is the receipt's receiver | Set automatically | The trigger overwrites `paid_by` |
-| Receipt with expenses can't be deleted | Delete button says "Delete its expenses first" | `on delete restrict` foreign key |
-| Sent by ≠ Received by | Form check | `receipts_sender_differs` check constraint |
+| A bank expense can't be more than the bank balance | Checked before saving, with the "Only ৳X is in the bank account…" message | `check_bank_expense` trigger takes one lock for every balance check, so two partners saving at once can't both overspend |
+| Money in can't be deleted if the bank balance would go below ৳0 | Delete button explains why | `check_money_in_change` trigger |
+| Revenue has a company name; investment has a partner | Form check and server check | `money_in_source_check` constraint |
+| Bank expenses have no partner; pocket expenses do | Set by the form | `expenses_paid_by_check` constraint |
 | Who entered it | Shown as "Entered by", from the device's "Entering as" choice | `created_by` and `created_at` set on insert and can't be changed afterwards |
 | Only you can read/write | Passcode required; data only flows through the server | Row-level security on every table: the public key sees nothing |
 
