@@ -55,7 +55,7 @@ export function DeleteButton({ onDelete, blockedReason }: { onDelete: () => Prom
       onClick={click}
       disabled={state === "busy"}
       aria-live="polite"
-      className={`cursor-pointer whitespace-nowrap rounded-md border px-2 py-1 text-xs ${armed ? "border-accent text-accent" : "border-line text-muted"}`}
+      className={`cursor-pointer whitespace-nowrap rounded-md border px-2 py-1 text-xs ${armed ? "border-danger text-danger" : "border-line text-muted"}`}
     >
       {label}
     </button>
@@ -74,6 +74,18 @@ export function AmountInput({ id, value, onChange, placeholder }: { id: string; 
       value={value}
       onChange={(e) => onChange(groupInput(e.target.value))}
     />
+  );
+}
+
+/** The CERTA& Advisory lockup; the white version is used in dark mode. */
+export function Logo({ height = 44 }: { height?: number }) {
+  const width = Math.round((height * 490) / 220);
+  return (
+    <picture>
+      <source srcSet="/brand/certa-lockup-white.png" media="(prefers-color-scheme: dark)" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, sized explicitly */}
+      <img src="/brand/certa-lockup.png" alt="CERTA& Advisory" width={width} height={height} style={{ height, width: "auto" }} />
+    </picture>
   );
 }
 

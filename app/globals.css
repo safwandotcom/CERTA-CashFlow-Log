@@ -1,16 +1,22 @@
 @import "tailwindcss";
 
-/* Palette carried over from the reference ledger (docs/partner-ledger.html) */
+/* CERTA& Advisory brand palette (certaadvisory.com): CERTA green, signal coral, ink. */
 :root {
-  --bg: #f6f4ef; --surface: #ffffff; --ink: #1d2421; --muted: #66706b; --line: #e2ded4;
-  --accent: #a3312b; --accent-soft: #f6e3e0; --green: #1f7a4f; --green-soft: #e1f1e7; --amber: #9a6a12; --amber-soft: #f6ecd6;
-  --p0: #a3312b; --p1: #1d5f8a; --p2: #6b4f9a;
+  --bg: #f6f9f7; --surface: #ffffff; --ink: #231f20; --muted: #55565a; --line: #e3e5e4;
+  --accent: #00753e; --accent-hover: #231f20; --accent-soft: #e4f3ea;
+  --green: #00904c; --green-soft: #e4f3ea;
+  --danger: #b8232a; --danger-soft: #fbe6e7;
+  --amber: #8a5a00; --amber-soft: #f7ecd5;
+  --p0: #00753e; --p1: #b8232a; --p2: #231f20;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #151917; --surface: #1e2421; --ink: #ecebe6; --muted: #9aa39e; --line: #313935;
-    --accent: #e2675e; --accent-soft: #3a2321; --green: #5cc48e; --green-soft: #1b3326; --amber: #e0b25a; --amber-soft: #3a2f18;
-    --p0: #e2675e; --p1: #6fb1de; --p2: #b49ae0;
+    --bg: #111513; --surface: #1a1f1d; --ink: #edeeed; --muted: #a3a8a5; --line: #2c3330;
+    --accent: #2fae70; --accent-hover: #45c486; --accent-soft: #163024;
+    --green: #3fc183; --green-soft: #163024;
+    --danger: #f0646a; --danger-soft: #3a1d1f;
+    --amber: #e0b25a; --amber-soft: #3a2f18;
+    --p0: #3fc183; --p1: #f0646a; --p2: #c9ccca;
     color-scheme: dark;
   }
 }
@@ -27,9 +33,10 @@
   --color-green-soft: var(--green-soft);
   --color-amber: var(--amber);
   --color-amber-soft: var(--amber-soft);
-  --font-display: var(--font-bricolage), "Segoe UI", system-ui, sans-serif;
-  --font-sans: var(--font-plex), "Segoe UI", system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, Menlo, monospace;
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-display: var(--font-poppins), "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-inter), "Segoe UI", system-ui, sans-serif;
 }
 
 body {
@@ -51,11 +58,11 @@ body {
   }
   .input:focus-visible, .btn:focus-visible, .tab:focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
   .btn {
-    @apply rounded-lg px-4 py-2.5 font-semibold text-white bg-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply rounded-[10px] px-5 py-2.5 font-semibold tracking-[.01em] text-white bg-accent cursor-pointer transition-colors duration-200 hover:bg-(--accent-hover) disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-accent;
   }
   .btn-green { @apply bg-green; }
-  .btn-ghost { @apply bg-transparent text-ink border border-line; }
-  .num { @apply font-mono tabular-nums; }
+  .btn-ghost { @apply bg-surface text-ink border border-line hover:bg-bg; }
+  .num { @apply tabular-nums; }
   .seg { @apply flex flex-wrap gap-1 rounded-lg border border-line bg-bg p-1; }
   .seg > button {
     @apply flex-1 cursor-pointer whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-muted;
@@ -64,6 +71,6 @@ body {
   .seg > button:focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
   .badge { @apply inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[.06em]; }
   .msg { @apply text-[13px] text-muted; }
-  .msg-err { @apply text-accent; }
+  .msg-err { @apply text-danger; }
   .note { @apply text-[13px] text-muted; }
 }

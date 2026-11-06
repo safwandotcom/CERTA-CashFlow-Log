@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadLedger, lock, setActingAs, type LedgerSnapshot } from "@/app/actions";
 import { formatBDT, totals, type Category, type Expense, type MoneyIn, type Partner } from "@/lib/ledger";
-import { PARTNER_COLORS } from "./ui";
+import { Logo, PARTNER_COLORS } from "./ui";
 import MoneyInTab from "./MoneyInTab";
 import ExpensesTab from "./ExpensesTab";
 import SummaryTab from "./SummaryTab";
@@ -102,8 +102,10 @@ export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
     <div className="mx-auto grid max-w-[960px] gap-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="eyebrow">Shared business ledger · BDT</div>
-          <h1 className="font-display text-[clamp(26px,6vw,36px)] font-extrabold leading-[1.1] tracking-tight">CERTA&amp; Advisory CashFlow Log</h1>
+          <Logo height={48} />
+          <h1 className="mt-3 font-display text-[clamp(24px,5.5vw,32px)] font-bold leading-[1.15] tracking-tight">
+            <span className="sr-only">CERTA&amp; Advisory </span>CashFlow Log
+          </h1>
           <p className="mt-1 max-w-[56ch] text-muted">Log money coming into the CERTA&amp; Advisory bank account, and every company expense, whether it's paid from the bank or by a partner.</p>
         </div>
         <div className="grid justify-items-start gap-1.5 text-xs text-muted sm:justify-items-end">
