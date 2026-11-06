@@ -8,3 +8,6 @@ next-env.d.ts
 .vercel
 # Working spreadsheet, kept out of the repo
 *.xlsx
+
+# Brainstorm mockups
+.superpowers/
