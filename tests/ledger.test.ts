@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  bankOverspendMessage,
   byCategory,
   byMonth,
-  checkExpense,
+  checkBankExpense,
+  companyNames,
   formatBDT,
   friendlyDbError,
   groupInput,
-  openReceipts,
   parseAmount,
-  partnerTotals,
-  receiptBalances,
-  receiptLabel,
+  partnerInvestment,
+  revenueByCompany,
   toCSV,
   totals,
   type Expense,
+  type MoneyIn,
   type Partner,
-  type Receipt,
 } from "@/lib/ledger";
 
 const partners: Partner[] = [
@@ -25,24 +25,28 @@ const partners: Partner[] = [
 ];
 const name = (id: string | null) => partners.find((p) => p.id === id)?.name ?? "";
 
-const receipt = (id: string, date: string, amount: number, from = "az", to = "ju"): Receipt => ({
-  id, date, amount, from_partner: from, to_partner: to, note: "", created_by: "ju", created_at: `${date}T09:00:00Z`,
+const rev = (id: string, date: string, company: string, amount: number): MoneyIn => ({
+  id, date, kind: "revenue", company, partner_id: null, amount, note: "", created_by: "ju", created_at: `${date}T09:00:00Z`,
 });
-const fromReceipt = (id: string, receiptId: string, date: string, category: string, amount: number): Expense => ({
-  id, receipt_id: receiptId, paid_by: "ju", date, category, amount, note: "", source: "receipt", created_by: "ju", created_at: `${date}T10:00:00Z`,
+const dep = (id: string, date: string, partner: string, amount: number): MoneyIn => ({
+  id, date, kind: "investment", company: null, partner_id: partner, amount, note: "", created_by: partner, created_at: `${date}T09:30:00Z`,
 });
-const direct = (id: string, by: string, date: string, category: string, amount: number): Expense => ({
-  id, receipt_id: null, paid_by: by, date, category, amount, note: "", source: "direct", created_by: by, created_at: `${date}T11:00:00Z`,
+const bankExp = (id: string, date: string, category: string, amount: number): Expense => ({
+  id, paid_by: null, date, category, amount, note: "", source: "bank", created_by: "ju", created_at: `${date}T10:00:00Z`,
+});
+const pocket = (id: string, by: string, date: string, category: string, amount: number): Expense => ({
+  id, paid_by: by, date, category, amount, note: "", source: "partner", created_by: by, created_at: `${date}T11:00:00Z`,
 });
 
-const receipts = [receipt("r1", "2026-10-01", 60000), receipt("r2", "2026-11-01", 60000)];
+const moneyIn = [
+  rev("m1", "2026-11-01", "Taj Consultancy", 150000),
+  dep("m2", "2026-11-02", "ju", 15000),
+  rev("m3", "2026-12-01", "taj consultancy ", 50000),
+];
 const expenses = [
-  fromReceipt("e1", "r1", "2026-10-03", "Staff salary", 30000),
-  fromReceipt("e2", "r1", "2026-10-03", "Staff operational cost", 15000),
-  fromReceipt("e3", "r1", "2026-10-05", "Office rent", 15000),
-  fromReceipt("e4", "r2", "2026-11-02", "Staff salary", 30000.5),
-  direct("d1", "to", "2026-10-10", "Subscriptions", 4500),
-  direct("d2", "to", "2026-11-10", "Technology", 12000),
+  bankExp("e1", "2026-11-03", "Staff salary", 30000),
+  pocket("e2", "ju", "2026-11-04", "Subscriptions", 5000),
+  pocket("e3", "to", "2026-11-05", "Technology", 5000),
 ];
 
 describe("formatting", () => {
@@ -66,97 +70,96 @@ describe("formatting", () => {
   });
 });
 
-describe("receipt left", () => {
-  const b = receiptBalances(receipts, expenses);
-  it("computes spent and left per receipt, newest first", () => {
-    expect(b.map((r) => r.id)).toEqual(["r2", "r1"]);
-    expect(b[1]).toMatchObject({ spent: 60000, left: 0 });
-    expect(b[0]).toMatchObject({ spent: 30000.5, left: 29999.5 });
-    expect(b[1].expenses.map((e) => e.id)).toEqual(["e1", "e2", "e3"]);
-  });
-  it("only receipts with money left appear in Paid from", () => {
-    expect(openReceipts(b).map((r) => r.id)).toEqual(["r2"]);
-  });
-  it("labels the dropdown option", () => {
-    expect(receiptLabel(b[0], name)).toBe("1 Nov 2026 · ৳60,000 from Azharul Islam · ৳29,999.50 left");
-  });
-  it("ignores direct payments", () => {
-    expect(receiptBalances([receipt("r", "2026-01-01", 100)], [direct("d", "ju", "2026-01-01", "Other", 50)])[0].left).toBe(100);
-  });
-  it("avoids float drift", () => {
-    const r = receiptBalances([receipt("r", "2026-01-01", 0.3)], [fromReceipt("a", "r", "2026-01-01", "Other", 0.1), fromReceipt("b", "r", "2026-01-01", "Other", 0.2)]);
-    expect(r[0].left).toBe(0);
-  });
-});
-
-describe("overspend rule", () => {
-  it("allows spending exactly what is left", () => {
-    expect(checkExpense(5000, 5000)).toEqual({ ok: true });
-  });
-  it("rejects spending more than is left, with the agreed message", () => {
-    expect(checkExpense(5000, 5000.01)).toEqual({
-      ok: false,
-      message: "Only ৳5,000 is left from this money. Log the rest from another receipt, or under Paid by partners.",
+describe("totals", () => {
+  it("splits revenue, investment, expenses and the bank balance", () => {
+    expect(totals(moneyIn, expenses)).toEqual({
+      revenue: 200000,
+      deposits: 15000,
+      pocket: 10000,
+      investment: 25000,
+      expenses: 40000,
+      bankSpent: 30000,
+      bank: 185000,
     });
   });
+  it("pocket expenses never change the bank balance", () => {
+    expect(totals(moneyIn, [...expenses, pocket("e9", "az", "2026-11-09", "Other", 999999)]).bank).toBe(185000);
+  });
+  it("avoids float drift", () => {
+    expect(totals([rev("a", "2026-11-01", "X", 0.1), rev("b", "2026-11-01", "X", 0.2)], []).bank).toBe(0.3);
+  });
+});
+
+describe("bank rule", () => {
+  it("allows spending exactly the bank balance", () => {
+    expect(checkBankExpense(185000, 185000).ok).toBe(true);
+  });
+  it("rejects one paisa more, with the agreed message", () => {
+    const r = checkBankExpense(185000, 185000.01);
+    expect(r).toEqual({ ok: false, message: "Only ৳1,85,000 is in the bank account. Log the rest as paid by a partner, or log money in first." });
+  });
   it("rejects zero or invalid amounts", () => {
-    expect(checkExpense(5000, 0).ok).toBe(false);
-    expect(checkExpense(5000, NaN).ok).toBe(false);
+    expect(checkBankExpense(100, 0).ok).toBe(false);
+    expect(checkBankExpense(100, NaN).ok).toBe(false);
   });
-  it("translates the database trigger error", () => {
-    expect(friendlyDbError("OVERSPEND:5000.00")).toBe(
-      "Only ৳5,000 is left from this money. Log the rest from another receipt, or under Paid by partners.",
-    );
-    expect(friendlyDbError('update or delete on table "receipts" violates foreign key constraint')).toMatch(/Delete the expenses/);
-  });
-});
-
-describe("totals", () => {
-  it("sums received, spent, left in hand and paid by partners", () => {
-    expect(totals(receipts, expenses)).toEqual({ received: 120000, spent: 90000.5, left: 29999.5, direct: 16500 });
+  it("translates the database errors", () => {
+    expect(friendlyDbError("OVERSPEND:100.00")).toBe(bankOverspendMessage(100));
+    expect(friendlyDbError("OVERSPEND:100.00", "delete-money-in")).toBe("Can't delete: the bank balance would go below ৳0. Delete some bank expenses first.");
+    expect(friendlyDbError("new row violates row-level security policy")).toBe("You don't have permission to do that.");
+    expect(friendlyDbError("boom")).toBe("Couldn't save. Check your connection and try again.");
   });
 });
 
-describe("per-partner totals", () => {
-  const t = Object.fromEntries(partnerTotals(partners, receipts, expenses).map((x) => [x.partner.id, x]));
-  it("credits the sender with money sent", () => {
-    expect(t.az).toMatchObject({ sent: 120000, paidDirectly: 0, contributed: 120000, receiver: null });
+describe("investment by partner", () => {
+  it("adds deposits and pocket payments, in partner order", () => {
+    expect(partnerInvestment(partners, moneyIn, expenses).map((p) => [p.partner.id, p.deposits, p.pocket, p.total])).toEqual([
+      ["az", 0, 0, 0],
+      ["ju", 15000, 5000, 20000],
+      ["to", 0, 5000, 5000],
+    ]);
   });
-  it("shows spent and still holding for the receiver", () => {
-    expect(t.ju).toMatchObject({ sent: 0, paidDirectly: 0, contributed: 0, receiver: { spent: 90000.5, holding: 29999.5 } });
+});
+
+describe("revenue by company", () => {
+  it("groups names ignoring case and spaces, showing the latest spelling", () => {
+    expect(revenueByCompany(moneyIn)).toEqual([{ company: "taj consultancy", amount: 200000 }]);
   });
-  it("credits direct payments", () => {
-    expect(t.to).toMatchObject({ sent: 0, paidDirectly: 16500, contributed: 16500, receiver: null });
+  it("sorts largest first", () => {
+    const r = revenueByCompany([...moneyIn, rev("m9", "2026-11-09", "Acme", 300000)]);
+    expect(r.map((x) => x.company)).toEqual(["Acme", "taj consultancy"]);
+  });
+  it("offers each company name once, most recent first", () => {
+    expect(companyNames([...moneyIn, rev("m9", "2026-10-09", "Acme", 1)])).toEqual(["taj consultancy", "Acme"]);
   });
 });
 
 describe("by category", () => {
-  it("combines both sources, largest first", () => {
+  it("combines both payment methods, largest first", () => {
     expect(byCategory(expenses)).toEqual([
-      { category: "Staff salary", amount: 60000.5 },
-      { category: "Office rent", amount: 15000 },
-      { category: "Staff operational cost", amount: 15000 },
-      { category: "Technology", amount: 12000 },
-      { category: "Subscriptions", amount: 4500 },
+      { category: "Staff salary", amount: 30000 },
+      { category: "Subscriptions", amount: 5000 },
+      { category: "Technology", amount: 5000 },
     ]);
   });
 });
 
 describe("monthly totals", () => {
-  it("splits received, spent and paid by partners per month, newest first", () => {
-    expect(byMonth(receipts, expenses)).toEqual([
-      { month: "2026-11", received: 60000, spent: 30000.5, direct: 12000 },
-      { month: "2026-10", received: 60000, spent: 60000, direct: 4500 },
+  it("counts pocket payments as investment and as expenses, newest month first", () => {
+    expect(byMonth(moneyIn, expenses)).toEqual([
+      { month: "2026-12", revenue: 50000, investment: 0, expenses: 0 },
+      { month: "2026-11", revenue: 150000, investment: 25000, expenses: 40000 },
     ]);
   });
 });
 
 describe("CSV export", () => {
   it("includes every record with a header, oldest first", () => {
-    const lines = toCSV(receipts, expenses, name).split("\r\n");
-    expect(lines).toHaveLength(1 + receipts.length + expenses.length);
-    expect(lines[0]).toContain('"Record"');
-    expect(lines[1]).toBe('"Money received","2026-10-01","Azharul Islam","Jubair Eusuf","","","","60000.00","Jubair Eusuf","2026-10-01T09:00:00Z"');
-    expect(lines.at(-1)).toContain('"Paid by partner"');
+    const lines = toCSV(moneyIn, expenses, name).split("\r\n");
+    expect(lines[0]).toBe('"Record","Date","From / Paid by","Category","Note","Amount (BDT)","Entered by","Entered at"');
+    expect(lines).toHaveLength(1 + moneyIn.length + expenses.length);
+    expect(lines[1]).toMatch(/^"Revenue","2026-11-01","Taj Consultancy","","","150000.00","Jubair Eusuf"/);
+    expect(lines[2]).toMatch(/^"Investment","2026-11-02","Jubair Eusuf",/);
+    expect(lines[3]).toMatch(/^"Expense \(bank\)","2026-11-03","Bank","Staff salary"/);
+    expect(lines[4]).toMatch(/^"Expense \(paid by partner\)","2026-11-04","Jubair Eusuf","Subscriptions"/);
   });
 });
