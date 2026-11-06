@@ -6,6 +6,22 @@
 -- or by a partner from their own pocket (source 'partner', also their investment).
 
 -- ---------------------------------------------------------------------------
+-- 0. Safety guard: the conversion below assumes the live data is exactly the one
+--    Taj Consultancy receipt and no expenses (or an empty new database).
+--    Anything else stops the migration before it changes a thing.
+-- ---------------------------------------------------------------------------
+
+do $$
+declare r int; e int;
+begin
+  select count(*) into r from public.receipts;
+  select count(*) into e from public.expenses;
+  if r > 1 or e > 0 then
+    raise exception 'Company account migration expected at most 1 receipt and no expenses, found % receipts and % expenses', r, e;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 1. Remove the per-receipt rules
 -- ---------------------------------------------------------------------------
 

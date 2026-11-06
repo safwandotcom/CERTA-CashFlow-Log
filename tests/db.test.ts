@@ -110,6 +110,39 @@ describe("conversion of existing data", () => {
   });
 });
 
+describe("migration safety guard", () => {
+  async function oldDbWith(receipts: number, expenses: number) {
+    const other = new PGlite();
+    await other.exec(supabaseStubs);
+    await other.exec(before);
+    await other.exec(seed);
+    const [az, ju] = (await other.query<{ id: string }>("select id from partners order by sort")).rows.map((r) => r.id);
+    for (let i = 0; i < receipts; i++) {
+      const [r] = (await other.query<{ id: string }>("insert into receipts (date, from_partner, to_partner, amount) values ('2026-11-01', $1, $2, 1000) returning id", [az, ju])).rows;
+      for (let j = 0; j < expenses; j++) {
+        await other.query("insert into expenses (source, receipt_id, paid_by, date, category, amount) values ('receipt', $1, $2, '2026-11-02', 'Other', 1)", [r.id, ju]);
+      }
+    }
+    return other;
+  }
+
+  it("refuses to convert when there is more than the one known receipt", async () => {
+    const other = await oldDbWith(2, 0);
+    await expect(other.exec(after)).rejects.toThrow(/expected at most 1 receipt and no expenses/);
+  });
+
+  it("refuses to convert when expenses exist", async () => {
+    const other = await oldDbWith(1, 1);
+    await expect(other.exec(after)).rejects.toThrow(/expected at most 1 receipt and no expenses/);
+  });
+
+  it("applies cleanly to a new, empty database", async () => {
+    const other = await oldDbWith(0, 0);
+    await other.exec(after);
+    expect((await other.query("select 1 from money_in")).rows).toHaveLength(0);
+  });
+});
+
 describe("money in rules", () => {
   it("enforces kind, partner and company", async () => {
     await expect(as(JUBAIR, "insert into money_in (date, kind, amount) values ('2026-11-01', 'investment', 1)")).rejects.toThrow(/money_in_source/);
