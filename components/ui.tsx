@@ -77,6 +77,22 @@ export function AmountInput({ id, value, onChange, placeholder }: { id: string; 
   );
 }
 
+/** Two or more mutually exclusive buttons, e.g. "A company" / "A partner". */
+export function Choice<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="field col-span-full">
+      <span className="label">{label}</span>
+      <div className="seg" role="group" aria-label={label}>
+        {options.map((o) => (
+          <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function Empty({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="grid justify-items-center gap-1.5 px-3 py-6 text-center text-muted">

@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { friendlyDbError, type Category, type Expense, type Partner, type Receipt } from "@/lib/ledger";
+import { friendlyDbError, type Category, type Expense, type Kind, type MoneyIn, type Partner, type Source } from "@/lib/ledger";
 import { COOKIE, MAX_AGE, isUnlocked, safeEqual, tokenFor } from "@/lib/passcode";
 
 const AS_COOKIE = "certa_as";
@@ -11,7 +11,7 @@ const AS_COOKIE = "certa_as";
 export interface LedgerSnapshot {
   partners: Partner[];
   categories: Category[];
-  receipts: Receipt[];
+  moneyIn: MoneyIn[];
   expenses: Expense[];
   actingAs: string | null;
 }
@@ -65,7 +65,7 @@ export async function loadLedger(): Promise<LedgerSnapshot> {
   const [p, c, r, e] = await Promise.all([
     s.from("partners").select("id,name,email,role,sort").order("sort"),
     s.from("categories").select("id,name,sort").order("sort"),
-    s.from("receipts").select("*").order("date", { ascending: false }),
+    s.from("money_in").select("*").order("date", { ascending: false }),
     s.from("expenses").select("*").order("date", { ascending: false }),
   ]);
   const err = p.error ?? c.error ?? r.error ?? e.error;
@@ -74,7 +74,7 @@ export async function loadLedger(): Promise<LedgerSnapshot> {
   const saved = jar.get(AS_COOKIE)?.value;
   // Default "entering as" is the second partner (Jubair), who keeps the books.
   const actingAs = partners.find((x) => x.id === saved)?.id ?? partners[1]?.id ?? partners[0]?.id ?? null;
-  return { partners, categories: (c.data ?? []) as Category[], receipts: money(r.data) as Receipt[], expenses: money(e.data) as Expense[], actingAs };
+  return { partners, categories: (c.data ?? []) as Category[], moneyIn: money(r.data) as MoneyIn[], expenses: money(e.data) as Expense[], actingAs };
 }
 
 export async function setActingAs(partnerId: string): Promise<Result> {
@@ -96,33 +96,55 @@ async function actor() {
 // Writes
 // ---------------------------------------------------------------------------
 
-export async function addReceipt(input: { date: string; from: string; to: string; amount: number; note: string }): Promise<Result> {
+async function isPartner(id: string | undefined) {
+  if (!id) return false;
+  const { data } = await db().from("partners").select("id").eq("id", id).maybeSingle();
+  return !!data;
+}
+
+/** Money into the company bank account: revenue from a company, or a partner's investment. */
+export async function addMoneyIn(input: { kind: Kind; partnerId?: string; company?: string; date: string; amount: number; note: string }): Promise<Result> {
   const createdBy = await actor();
   if (!(input.amount > 0)) return { error: "Enter the amount received." };
-  if (input.from === input.to) return { error: "Sent by and Received by must be different partners." };
+  if (!input.date) return { error: "Pick the date received." };
+  const company = clean(input.company, 80);
+  if (input.kind === "revenue") {
+    if (!company) return { error: "Type the company's name." };
+  } else if (input.kind === "investment") {
+    if (!(await isPartner(input.partnerId))) return { error: "Pick the partner." };
+  } else {
+    return { error: "Pick where the money came from." };
+  }
   const { error } = await db()
-    .from("receipts")
-    .insert({ date: input.date, from_partner: input.from, to_partner: input.to, amount: input.amount, note: clean(input.note), created_by: createdBy });
+    .from("money_in")
+    .insert({
+      date: input.date,
+      kind: input.kind,
+      company: input.kind === "revenue" ? company : null,
+      partner_id: input.kind === "investment" ? input.partnerId : null,
+      amount: input.amount,
+      note: clean(input.note),
+      created_by: createdBy,
+    });
   return error ? fail(error.message) : { ok: true };
 }
 
-export async function addExpense(input: {
-  source: "receipt" | "direct";
-  receiptId: string | null;
-  paidBy: string;
-  date: string;
-  category: string;
-  amount: number;
-  note: string;
-}): Promise<Result> {
+/** A company expense, paid from the bank or by a partner from their own pocket. */
+export async function addExpense(input: { source: Source; paidBy?: string; date: string; category: string; amount: number; note: string }): Promise<Result> {
   const createdBy = await actor();
-  if (!(input.amount > 0)) return { error: "Enter the amount." };
+  if (!(input.amount > 0)) return { error: "Enter the amount paid." };
+  if (!input.date) return { error: "Pick the date paid." };
+  if (!clean(input.category, 60)) return { error: "Pick a category." };
+  if (input.source === "partner") {
+    if (!(await isPartner(input.paidBy))) return { error: "Pick the partner who paid." };
+  } else if (input.source !== "bank") {
+    return { error: "Pick who paid." };
+  }
   const { error } = await db()
     .from("expenses")
     .insert({
       source: input.source,
-      receipt_id: input.source === "receipt" ? input.receiptId : null,
-      paid_by: input.paidBy, // for receipt expenses the database sets this to the receiver
+      paid_by: input.source === "partner" ? input.paidBy : null,
       date: input.date,
       category: clean(input.category, 60),
       amount: input.amount,
@@ -132,11 +154,12 @@ export async function addExpense(input: {
   return error ? fail(error.message) : { ok: true };
 }
 
-export async function deleteRecord(table: "receipts" | "expenses", id: string): Promise<Result> {
+export async function deleteRecord(table: "money_in" | "expenses", id: string): Promise<Result> {
   await guard();
-  if (table !== "receipts" && table !== "expenses") return { error: "Unknown record." };
+  if (table !== "money_in" && table !== "expenses") return { error: "Unknown record." };
   const { error } = await db().from(table).delete().eq("id", id);
-  return error ? fail(error.message) : { ok: true };
+  if (!error) return { ok: true };
+  return { error: friendlyDbError(error.message, table === "money_in" ? "delete-money-in" : undefined) };
 }
 
 // ---------------------------------------------------------------------------

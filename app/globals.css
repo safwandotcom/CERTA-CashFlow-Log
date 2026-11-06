@@ -56,6 +56,13 @@ body {
   .btn-green { @apply bg-green; }
   .btn-ghost { @apply bg-transparent text-ink border border-line; }
   .num { @apply font-mono tabular-nums; }
+  .seg { @apply flex flex-wrap gap-1 rounded-lg border border-line bg-bg p-1; }
+  .seg > button {
+    @apply flex-1 cursor-pointer whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-muted;
+  }
+  .seg > button[aria-pressed="true"] { @apply bg-surface text-ink shadow-sm; }
+  .seg > button:focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
+  .badge { @apply inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[.06em]; }
   .msg { @apply text-[13px] text-muted; }
   .msg-err { @apply text-accent; }
   .note { @apply text-[13px] text-muted; }

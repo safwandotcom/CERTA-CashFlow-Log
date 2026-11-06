@@ -2,27 +2,31 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadLedger, lock, setActingAs, type LedgerSnapshot } from "@/app/actions";
-import { formatBDT, receiptBalances, totals, type Category, type Expense, type Partner, type Receipt } from "@/lib/ledger";
+import { formatBDT, totals, type Category, type Expense, type MoneyIn, type Partner } from "@/lib/ledger";
 import { PARTNER_COLORS } from "./ui";
-import ReceivedTab from "./ReceivedTab";
-import DirectTab from "./DirectTab";
+import MoneyInTab from "./MoneyInTab";
+import ExpensesTab from "./ExpensesTab";
 import SummaryTab from "./SummaryTab";
 import SettingsTab from "./SettingsTab";
 
 const TABS = [
-  { id: "received", label: "Money received" },
-  { id: "direct", label: "Paid by partners" },
+  { id: "in", label: "Money in" },
+  { id: "expenses", label: "Expenses" },
   { id: "summary", label: "Summary" },
   { id: "settings", label: "Settings" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 const REFRESH_MS = 20_000;
+// Old links keep working.
+const ALIASES: Record<string, Tab> = { received: "in", direct: "expenses" };
 
 export interface LedgerData {
   partners: Partner[];
   categories: Category[];
-  receipts: Receipt[];
+  moneyIn: MoneyIn[];
   expenses: Expense[];
+  /** Current company bank balance. */
+  bank: number;
   reload: () => Promise<void>;
   partnerName: (id: string | null) => string;
   partnerColor: (id: string) => string;
@@ -32,7 +36,7 @@ export interface LedgerData {
 export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
   const [snap, setSnap] = useState(initial);
   const [status, setStatus] = useState<"live" | "offline">("live");
-  const [tab, setTab] = useState<Tab>("received");
+  const [tab, setTab] = useState<Tab>("in");
 
   const reload = useCallback(async () => {
     try {
@@ -58,7 +62,8 @@ export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
 
   useEffect(() => {
     const fromHash = () => {
-      const h = window.location.hash.slice(1);
+      const raw = window.location.hash.slice(1);
+      const h = ALIASES[raw] ?? raw;
       if (TABS.some((t) => t.id === h)) setTab(h as Tab);
     };
     fromHash();
@@ -76,22 +81,22 @@ export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
     await setActingAs(id);
   }
 
-  const { partners, categories, receipts, expenses, actingAs } = snap;
+  const { partners, categories, moneyIn, expenses, actingAs } = snap;
   const byId = useMemo(() => new Map(partners.map((p, i) => [p.id, { p, color: PARTNER_COLORS[i % PARTNER_COLORS.length] }])), [partners]);
+  const t = useMemo(() => totals(moneyIn, expenses), [moneyIn, expenses]);
   const data: LedgerData = {
     partners,
     categories,
-    receipts,
+    moneyIn,
     expenses,
+    bank: t.bank,
     reload,
     partnerName: (id) => (id && byId.get(id)?.p.name) || "A partner",
     partnerColor: (id) => byId.get(id)?.color ?? "var(--muted)",
     enteredBy: (id) => (id && byId.get(id)?.p.name) || "",
   };
 
-  const t = totals(receipts, expenses);
-  const balances = useMemo(() => receiptBalances(receipts, expenses), [receipts, expenses]);
-  const count = receipts.length + expenses.length;
+  const count = moneyIn.length + expenses.length;
 
   return (
     <div className="mx-auto grid max-w-[960px] gap-5">
@@ -99,7 +104,7 @@ export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
         <div>
           <div className="eyebrow">Shared business ledger · BDT</div>
           <h1 className="font-display text-[clamp(26px,6vw,36px)] font-extrabold leading-[1.1] tracking-tight">CERTA&amp; Advisory CashFlow Log</h1>
-          <p className="mt-1 max-w-[56ch] text-muted">Log money when it's received, log each expense against the money it came from, and log anything a partner pays directly.</p>
+          <p className="mt-1 max-w-[56ch] text-muted">Log money coming into the CERTA&amp; Advisory bank account, and every company expense, whether it's paid from the bank or by a partner.</p>
         </div>
         <div className="grid justify-items-start gap-1.5 text-xs text-muted sm:justify-items-end">
           <span aria-live="polite">{status === "live" ? `Up to date · ${count} ${count === 1 ? "entry" : "entries"}` : "Can't reach the ledger · retrying"}</span>
@@ -123,10 +128,10 @@ export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
 
       <section aria-label="Totals" className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-line bg-line sm:grid-cols-4">
         {[
-          ["Money received", t.received],
-          ["Spent from it", t.spent],
-          ["Left in hand", t.left],
-          ["Paid by partners", t.direct],
+          ["Bank balance", t.bank],
+          ["Revenue", t.revenue],
+          ["Partner investment", t.investment],
+          ["Company expenses", t.expenses],
         ].map(([label, v]) => (
           <div key={label as string} className="grid min-w-0 gap-0.5 bg-surface px-3.5 py-3">
             <span className="eyebrow">{label}</span>
@@ -149,8 +154,8 @@ export default function Ledger({ initial }: { initial: LedgerSnapshot }) {
         ))}
       </nav>
 
-      {tab === "received" && <ReceivedTab data={data} balances={balances} />}
-      {tab === "direct" && <DirectTab data={data} />}
+      {tab === "in" && <MoneyInTab data={data} />}
+      {tab === "expenses" && <ExpensesTab data={data} />}
       {tab === "summary" && <SummaryTab data={data} />}
       {tab === "settings" && <SettingsTab data={data} />}
     </div>
